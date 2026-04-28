@@ -1,41 +1,58 @@
+using Microsoft.OpenApi.Models;
+
+LoadDotEnvFile();
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "DR-Repo API", Version = "v1" });
+});
 
 var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-
+app.UseSwagger();
+app.UseSwaggerUI();
 app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
-
+app.UseAuthorization();
+app.MapControllers();
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+static void LoadDotEnvFile()
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    var searchPaths = new[]
+    {
+        Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), ".env")),
+        Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", ".env")),
+    };
+
+    var envFilePath = searchPaths.FirstOrDefault(File.Exists);
+    if (envFilePath is null)
+    {
+        return;
+    }
+
+    foreach (var line in File.ReadAllLines(envFilePath))
+    {
+        var trimmedLine = line.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith('#'))
+        {
+            continue;
+        }
+
+        var equalsIndex = trimmedLine.IndexOf('=');
+        if (equalsIndex <= 0)
+        {
+            continue;
+        }
+
+        var key = trimmedLine[..equalsIndex].Trim();
+        var value = trimmedLine[(equalsIndex + 1)..].Trim().Trim('"');
+
+        if (!string.IsNullOrWhiteSpace(key) && Environment.GetEnvironmentVariable(key) is null)
+        {
+            Environment.SetEnvironmentVariable(key, value);
+        }
+    }
 }
