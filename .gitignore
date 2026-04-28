@@ -45,3 +45,8 @@ __screenshots__/
 /Klima-Kontrolloeren-Backend/obj
 /Klima-Kontrolloeren-Frontend/dist
 /Klima-Kontrolloeren-Backend/obj/Debug
+
+# Build and IDE artifacts
+*.user
+bin/
+obj/
