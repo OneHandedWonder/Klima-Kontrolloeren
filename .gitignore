@@ -40,3 +40,5 @@ __screenshots__/
 
 # Exclude .env files, but keep .env.example
 .env
+/.vs
+/Klima-Kontrolloeren-Backend
