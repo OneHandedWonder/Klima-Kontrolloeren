@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Climate Controller</title>
+    <link rel="stylesheet" href="stylesheet.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <div class="container">
+            <header class="header">
+                <h1>Klima-Kontrolloeren</h1>
+                <p class="header-sub">Indoor Climate Monitor</p>
+            </header>
+
+            <!-- Indoor main display -->
+            <div class="indoor-section">
+                <h2 class="indoor-title">Indoor Sensor Data</h2>
+                <div class="indoor-metrics">
+                    <div class="metric-tile">
+                        <span class="metric-label">Temperature</span>
+                        <span class="metric-value">{{ temperature || '—' }}<span class="metric-unit">°C</span></span>
+                    </div>
+                    <div class="metric-tile">
+                        <span class="metric-label">Humidity</span>
+                        <span class="metric-value">{{ humidity || '—' }}<span class="metric-unit">%</span></span>
+                    </div>
+                    <div class="metric-tile co2-tile">
+                        <span class="metric-label">CO₂</span>
+                        <span class="metric-value">{{ co2 || '—' }}<span class="metric-unit">ppm</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Secondary: outdoor + graphs -->
+            <div class="dashboard-container">
+                <div class="dashboard-card weather-card">
+                    <h3>Outdoor Weather</h3>
+                    <p class="subtitle">Roskilde, DK — openweathermap</p>
+                    <div class="card-content">
+                        <div class="outdoor-row">
+                            <span class="outdoor-temp">{{ temperature || '—' }}°C</span>
+                            <span class="outdoor-humidity">Humidity: {{ humidity || '—' }}%</span>
+                        </div>
+                        <p class="weather-desc">{{ weatherDesc }}</p>
+                        <div class="forecast">
+                            <div class="forecast-day" v-for="day in forecast" :key="day.day">
+                                <span>{{ day.day }}</span>
+                                <span>{{ day.temp }}°</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card graphs-card">
+                    <h3>Graphs</h3>
+                    <p class="subtitle">Historical trends</p>
+                    <div class="card-content">
+                        <div class="chart-placeholder">
+                            <svg viewBox="0 0 300 150" class="bar-chart">
+                                <rect x="20" y="80" width="25" height="60" fill="#4CAF50"/>
+                                <rect x="55" y="60" width="25" height="80" fill="#4CAF50"/>
+                                <rect x="90" y="70" width="25" height="70" fill="#4CAF50"/>
+                                <rect x="125" y="50" width="25" height="90" fill="#4CAF50"/>
+                                <rect x="160" y="65" width="25" height="75" fill="#4CAF50"/>
+                                <rect x="195" y="45" width="25" height="95" fill="#4CAF50"/>
+                                <rect x="230" y="55" width="25" height="85" fill="#4CAF50"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-section">
+                <button @click="fetchData" class="refresh-btn">Refresh Data</button>
+                <div class="update-status">
+                    <span v-if="lastUpdated" :class="['update-time', { 'just-updated': justUpdated }]">
+                        {{ justUpdated ? 'Updated!' : 'Last updated: ' + lastUpdated }}
+                    </span>
+                    <span v-else class="update-time">Waiting for data...</span>
+                </div>
+            </div>
+
+            <footer class="footer">
+                <p>Indeholder: vejr-API-modul, dashboard-modul, dataleap, dokumentation</p>
+            </footer>
+        </div>
+    </div>
+
+    <script src="index.js"></script>
