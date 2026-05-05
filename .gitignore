@@ -42,3 +42,5 @@ __screenshots__/
 .env
 /.vs
 /Klima-Kontrolloeren-Backend/obj
+/Klima-Kontrolloeren-Backend/appsettings.json
+/Klima-Kontrolloeren-Backend/firebase-service-account.json
