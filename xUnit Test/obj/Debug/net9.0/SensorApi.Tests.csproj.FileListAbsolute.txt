@@ -1,0 +1,8 @@
+C:\Users\Michael\Source\Repos\Klima-Kontrolloeren\xUnit Test\bin\Debug\net9.0\.msCoverageSourceRootsMapping_SensorApi.Tests
+C:\Users\Michael\Source\Repos\Klima-Kontrolloeren\xUnit Test\bin\Debug\net9.0\CoverletSourceRootsMapping_SensorApi.Tests
+C:\Users\Michael\Source\Repos\Klima-Kontrolloeren\xUnit Test\obj\Debug\net9.0\SensorApi.Tests.csproj.AssemblyReference.cache
+C:\Users\Michael\Source\Repos\Klima-Kontrolloeren\xUnit Test\obj\Debug\net9.0\SensorApi.Tests.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Michael\Source\Repos\Klima-Kontrolloeren\xUnit Test\obj\Debug\net9.0\SensorApi.Tests.AssemblyInfoInputs.cache
+C:\Users\Michael\Source\Repos\Klima-Kontrolloeren\xUnit Test\obj\Debug\net9.0\SensorApi.Tests.AssemblyInfo.cs
+C:\Users\Michael\Source\Repos\Klima-Kontrolloeren\xUnit Test\obj\Debug\net9.0\SensorApi.Tests.csproj.CoreCompileInputs.cache
+C:\Users\Michael\Source\Repos\Klima-Kontrolloeren\xUnit Test\obj\Debug\net9.0\SensorApi.Tests.sourcelink.json
