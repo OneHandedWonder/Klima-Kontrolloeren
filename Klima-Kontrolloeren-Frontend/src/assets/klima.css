@@ -1,0 +1,264 @@
+/* Global Styles migrated from Frond visueal/stylesheet.css */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0d3b66 0%, #1a5490 100%);
+    min-height: 100vh;
+    padding: 40px 20px;
+    color: #ffffff;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+@keyframes titleGlow {
+    0%, 100% { filter: drop-shadow(0 0 12px rgba(127, 216, 255, 0.25)); }
+    50%       { filter: drop-shadow(0 0 28px rgba(127, 216, 255, 0.5)); }
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.header h1 {
+    font-size: 52px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    line-height: 1.1;
+    animation: titleGlow 3.5s ease-in-out infinite;
+}
+
+.title-klima {
+    background: linear-gradient(135deg, #7fd8ff, #ffffff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.title-dash {
+    background: linear-gradient(135deg, #ffffff, #4CAF50);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.title-kontrol {
+    background: linear-gradient(135deg, #4CAF50, #a8e6a3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.header h1::after {
+    content: '';
+    display: block;
+    width: 120px;
+    height: 2px;
+    margin: 14px auto 0;
+    background: linear-gradient(to right, transparent, #4CAF50, #7fd8ff, transparent);
+    border-radius: 2px;
+}
+
+.header-sub {
+    font-size: 13px;
+    color: #5a8fa8;
+    margin-top: 16px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+@keyframes loadingPulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.35; }
+}
+
+.indoor-section {
+    background: linear-gradient(135deg, #0a2e52 0%, #0f4c81 100%);
+    border-radius: 18px;
+    padding: 40px 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 12px 50px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sensor-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin-bottom: 24px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-dot.connecting {
+    background: #7fa8bf;
+    animation: loadingPulse 1.2s ease-in-out infinite;
+}
+
+.status-dot.online {
+    background: #4CAF50;
+    box-shadow: 0 0 7px rgba(76, 175, 80, 0.7);
+}
+
+.status-dot.offline {
+    background: #f44336;
+    box-shadow: 0 0 7px rgba(244, 67, 54, 0.7);
+}
+
+.status-text {
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #5a7f99;
+}
+
+.indoor-metrics.loading .metric-tile {
+    animation: loadingPulse 1.5s ease-in-out infinite;
+}
+
+.indoor-title {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #7fa8bf;
+    margin-bottom: 30px;
+}
+
+.indoor-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+}
+
+.metric-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 30px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.metric-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 14px;
+}
+
+.metric-label {
+    font-size: 13px;
+    color: #7fa8bf;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.info-wrap { position: relative; display: inline-flex; }
+.info-icon { width: 16px; height: 16px; border-radius: 50%; background: rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#a0c4d4; font-size:10px; font-style:italic; font-weight:700; font-family:Georgia, serif; display:flex; align-items:center; justify-content:center; cursor:help; transition:background .2s; flex-shrink:0 }
+.info-wrap:hover .info-icon { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.35); }
+.info-tooltip { display:none; position:absolute; bottom:calc(100% + 10px); left:50%; transform:translateX(-50%); background:#071e36; border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:13px 15px; width:230px; z-index:200; box-shadow:0 10px 30px rgba(0,0,0,0.6); pointer-events:none }
+.info-wrap:hover .info-tooltip { display:block }
+.metric-value { font-size:58px; font-weight:200; color:#ffffff; line-height:1 }
+.metric-unit { font-size:20px; font-weight:400; color:#a0c4d4; margin-left:4px }
+.metric-value.good { color:#4CAF50 }
+.metric-value.warning { color:#FF9800 }
+.metric-value.bad { color:#f44336 }
+.status-scale { margin-top:18px; width:100%; display:flex; flex-direction:column; align-items:center; gap:6px }
+.scale-bar { width:85%; height:7px; border-radius:4px; position:relative }
+.scale-indicator { position:absolute; top:50%; transform:translate(-50%,-50%); width:14px; height:14px; background:#ffffff; border-radius:50%; box-shadow:0 0 6px rgba(0,0,0,0.5); pointer-events:none }
+.scale-range-labels { width:85%; display:flex; justify-content:space-between; font-size:10px; color:#5a7f99; letter-spacing:0.3px }
+.status-badge { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:3px 12px; border-radius:12px; margin-top:4px }
+.status-badge.good { color:#4CAF50; background:rgba(76,175,80,0.15) }
+.status-badge.warning { color:#FF9800; background:rgba(255,152,0,0.15) }
+.status-badge.bad { color:#f44336; background:rgba(244,67,54,0.15) }
+.dashboard-container { display:grid; grid-template-columns:1fr 1fr; gap:30px; margin-bottom:40px }
+.dashboard-card { background: linear-gradient(135deg,#0f4c81 0%,#1a5a8c 100%); border-radius:15px; padding:30px; box-shadow:0 10px 40px rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); display:flex; flex-direction:column }
+.dashboard-card h3 { font-size:22px; font-weight:600; margin-bottom:5px }
+.subtitle { font-size:14px; color:#a0c4d4; margin-bottom:25px; font-weight:400 }
+.card-content { color:#d1e3f0; flex:1; display:flex; flex-direction:column }
+.weather-current { display:flex; flex-direction:column; gap:10px }
+.weather-main { display:flex; align-items:center; gap:18px }
+.weather-emoji { font-size:64px; line-height:1 }
+.outdoor-temp { font-size:64px; font-weight:200; color:#ffffff; line-height:1 }
+.weather-desc { font-size:15px; color:#a0c4d4 }
+.forecast { display:flex; gap:12px }
+.forecast-day { display:flex; flex-direction:column; align-items:center }
+.forecast-name { color:#a0c4d4 }
+.button-section { display:flex; align-items:center; gap:12px }
+.refresh-btn { border:0; border-radius:10px; padding:8px 14px; font-weight:700; cursor:pointer; background:#1c7a63; color:#fff }
+.update-time { color:#a0c4d4 }
+.footer { margin-top:28px; text-align:center; color:#a0c4d4 }
+
+/* Graph button styles */
+.graph-metric-btns {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.graph-period-btns {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.metric-graph-btn,
+.period-btn {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: #a0c4d4;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: capitalize;
+    letter-spacing: 0.5px;
+}
+
+.metric-graph-btn:hover,
+.period-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #d1e3f0;
+}
+
+.metric-graph-btn.active,
+.period-btn.active {
+    background: #4CAF50;
+    border-color: #4CAF50;
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(76, 175, 80, 0.4);
+}
+
+.metric-graph-btn.active:hover,
+.period-btn.active:hover {
+    background: #5bc25f;
+    border-color: #5bc25f;
+    box-shadow: 0 0 16px rgba(76, 175, 80, 0.6);
+}
+
+@media (max-width: 900px) {
+  .indoor-metrics { grid-template-columns: 1fr }
+  .dashboard-container { grid-template-columns: 1fr }
+}
