@@ -15,7 +15,7 @@ public class DbConnectionFactory : IDbConnectionFactory
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
     }
 
-    public async Task SaveReadingAsync(string firebaseUid, SensorReadingDto dto)
+    public async Task SaveReadingAsync(SensorReadingDto dto)
     {
         const string sql = """
             INSERT INTO SensorReadings (FirebaseUID, SensorId, Temperature, Humidity, CO2PPM)
@@ -25,7 +25,7 @@ public class DbConnectionFactory : IDbConnectionFactory
         await using var conn = new SqlConnection(_connectionString);
         await using var cmd = new SqlCommand(sql, conn);
 
-        cmd.Parameters.AddWithValue("@FirebaseUID", firebaseUid);
+        cmd.Parameters.AddWithValue("@FirebaseUID", dto.SensorId);
         cmd.Parameters.AddWithValue("@SensorId", dto.SensorId);
         cmd.Parameters.AddWithValue("@Temperature", dto.Temperature);
         cmd.Parameters.AddWithValue("@Humidity", dto.Humidity);
@@ -35,12 +35,11 @@ public class DbConnectionFactory : IDbConnectionFactory
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public async Task<List<SensorReading>> GetReadingsAsync(string firebaseUid, int limit)
+    public async Task<List<SensorReading>> GetReadingsAsync(int limit)
     {
         const string sql = """
-            SELECT TOP (@Limit) Id, FirebaseUID, SensorId, Temperature, Humidity, CO2PPM, RecordedAt
+            SELECT TOP (@Limit) Id, FirebaseUID AS SourceId, SensorId, Temperature, Humidity, CO2PPM, RecordedAt
             FROM SensorReadings
-            WHERE FirebaseUID = @FirebaseUID
             ORDER BY RecordedAt DESC
             """;
 
@@ -49,7 +48,6 @@ public class DbConnectionFactory : IDbConnectionFactory
         await using var conn = new SqlConnection(_connectionString);
         await using var cmd = new SqlCommand(sql, conn);
 
-        cmd.Parameters.AddWithValue("@FirebaseUID", firebaseUid);
         cmd.Parameters.AddWithValue("@Limit", limit);
 
         await conn.OpenAsync();
@@ -60,7 +58,7 @@ public class DbConnectionFactory : IDbConnectionFactory
             readings.Add(new SensorReading
             {
                 Id = reader.GetInt32(0),
-                FirebaseUID = reader.GetString(1),
+                SourceId = reader.GetString(1),
                 SensorId = reader.GetString(2),
                 Temperature = reader.GetDouble(3),
                 Humidity = reader.GetDouble(4),

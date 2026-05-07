@@ -4,6 +4,6 @@ namespace KlimaKontrolloerenBackend.Services;
 
 public interface ISensorService
 {
-    Task SaveReadingAsync(string firebaseUid, SensorReadingDto dto);
-    Task<List<SensorReading>> GetReadingsAsync(string firebaseUid, int limit = 100);
+    Task SaveReadingAsync(SensorReadingDto dto);
+    Task<List<SensorReading>> GetReadingsAsync(int limit = 100);
 }

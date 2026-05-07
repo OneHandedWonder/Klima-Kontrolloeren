@@ -12,16 +12,16 @@ public class SensorService : ISensorService
         _db = db;
     }
 
-    public async Task SaveReadingAsync(string firebaseUid, SensorReadingDto dto)
+    public async Task SaveReadingAsync(SensorReadingDto dto)
     {
-        await _db.SaveReadingAsync(firebaseUid, dto);
+        await _db.SaveReadingAsync(dto);
     }
 
-    public async Task<List<SensorReading>> GetReadingsAsync(string firebaseUid, int limit = 100)
+    public async Task<List<SensorReading>> GetReadingsAsync(int limit = 100)
     {
         if (limit <= 0)
             throw new ArgumentException("Limit must be greater than 0.", nameof(limit));
 
-        return await _db.GetReadingsAsync(firebaseUid, limit);
+        return await _db.GetReadingsAsync(limit);
     }
 }

@@ -11,14 +11,12 @@ namespace KlimaKontrolloerenBackend.Tests.Controllers;
 public class SensorControllerTests
 {
     private readonly Mock<ISensorService> _mockSensorService;
-    private readonly Mock<IFirebaseService> _mockFirebaseService;
     private readonly SensorController _sut;
 
     public SensorControllerTests()
     {
         _mockSensorService = new Mock<ISensorService>();
-        _mockFirebaseService = new Mock<IFirebaseService>();
-        _sut = new SensorController(_mockSensorService.Object, _mockFirebaseService.Object);
+        _sut = new SensorController(_mockSensorService.Object);
     }
 
     // -------------------------
@@ -37,14 +35,8 @@ public class SensorControllerTests
             CO2PPM = 415.0
         };
 
-        MockHelpers.SetAuthHeader(_sut, "valid-token");
-
-        _mockFirebaseService
-            .Setup(x => x.VerifyTokenAsync("valid-token"))
-            .ReturnsAsync("uid-123");
-
         _mockSensorService
-            .Setup(x => x.SaveReadingAsync("uid-123", dto))
+            .Setup(x => x.SaveReadingAsync(dto))
             .Returns(Task.CompletedTask);
 
         // Act
@@ -56,45 +48,19 @@ public class SensorControllerTests
     }
 
     [Fact]
-    public async Task PostReading_InvalidToken_Returns401()
+    public async Task PostReading_ValidDto_Returns201()
     {
         // Arrange
-        MockHelpers.SetAuthHeader(_sut, "bad-token");
-
-        _mockFirebaseService
-            .Setup(x => x.VerifyTokenAsync("bad-token"))
-            .ReturnsAsync((string?)null);
-
-        // Act
         var result = await _sut.PostReading(new SensorReadingDto { SensorId = "pi-sensor-01" });
 
         // Assert
-        Assert.IsType<UnauthorizedObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task PostReading_MissingAuthHeader_Returns401()
-    {
-        // Arrange
-        MockHelpers.SetNoAuthHeader(_sut);
-
-        // Act
-        var result = await _sut.PostReading(new SensorReadingDto { SensorId = "pi-sensor-01" });
-
-        // Assert
-        Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.IsType<CreatedResult>(result);
     }
 
     [Fact]
     public async Task PostReading_MissingSensorId_Returns400()
     {
         // Arrange
-        MockHelpers.SetAuthHeader(_sut, "valid-token");
-
-        _mockFirebaseService
-            .Setup(x => x.VerifyTokenAsync("valid-token"))
-            .ReturnsAsync("uid-123");
-
         // Act
         var result = await _sut.PostReading(new SensorReadingDto { SensorId = "" });
 
@@ -110,20 +76,14 @@ public class SensorControllerTests
     public async Task GetReadings_ValidToken_Returns200WithData()
     {
         // Arrange
-        MockHelpers.SetAuthHeader(_sut, "valid-token");
-
-        _mockFirebaseService
-            .Setup(x => x.VerifyTokenAsync("valid-token"))
-            .ReturnsAsync("uid-123");
-
         var readings = new List<SensorReading>
         {
-            new() { Id = 1, FirebaseUID = "uid-123", SensorId = "pi-sensor-01",
+            new() { Id = 1, SourceId = "device-123", SensorId = "pi-sensor-01",
                     Temperature = 22.5, Humidity = 60.0, CO2PPM = 415.0 }
         };
 
         _mockSensorService
-            .Setup(x => x.GetReadingsAsync("uid-123", 100))
+            .Setup(x => x.GetReadingsAsync(100))
             .ReturnsAsync(readings);
 
         // Act
@@ -136,34 +96,21 @@ public class SensorControllerTests
     }
 
     [Fact]
-    public async Task GetReadings_InvalidToken_Returns401()
+    public async Task GetReadings_Returns200WithData()
     {
         // Arrange
-        MockHelpers.SetAuthHeader(_sut, "bad-token");
-
-        _mockFirebaseService
-            .Setup(x => x.VerifyTokenAsync("bad-token"))
-            .ReturnsAsync((string?)null);
-
-        // Act
         var result = await _sut.GetReadings();
 
         // Assert
-        Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.IsType<OkObjectResult>(result);
     }
 
     [Fact]
     public async Task GetReadings_NoReadingsExist_Returns200WithEmptyList()
     {
         // Arrange
-        MockHelpers.SetAuthHeader(_sut, "valid-token");
-
-        _mockFirebaseService
-            .Setup(x => x.VerifyTokenAsync("valid-token"))
-            .ReturnsAsync("uid-123");
-
         _mockSensorService
-            .Setup(x => x.GetReadingsAsync("uid-123", 100))
+            .Setup(x => x.GetReadingsAsync(100))
             .ReturnsAsync(new List<SensorReading>());
 
         // Act

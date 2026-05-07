@@ -21,7 +21,6 @@ public class SensorServiceTests
     public async Task SaveReadingAsync_ValidInput_CallsDbOnce()
     {
         // Arrange
-        const string uid = "uid-123";
         var dto = new SensorReadingDto
         {
             SensorId = "pi-sensor-01",
@@ -31,54 +30,51 @@ public class SensorServiceTests
         };
 
         _mockDb
-            .Setup(x => x.SaveReadingAsync(uid, dto))
+            .Setup(x => x.SaveReadingAsync(dto))
             .Returns(Task.CompletedTask);
 
         // Act
-        await _sut.SaveReadingAsync(uid, dto);
+        await _sut.SaveReadingAsync(dto);
 
         // Assert
-        _mockDb.Verify(x => x.SaveReadingAsync(uid, dto), Times.Once);
+        _mockDb.Verify(x => x.SaveReadingAsync(dto), Times.Once);
     }
 
     [Fact]
-    public async Task GetReadingsAsync_ValidUid_ReturnsList()
+    public async Task GetReadingsAsync_ValidLimit_ReturnsList()
     {
         // Arrange
-        const string uid = "uid-123";
         var expected = new List<SensorReading>
         {
-            new() { Id = 1, FirebaseUID = uid, SensorId = "pi-sensor-01",
+            new() { Id = 1, SourceId = "device-123", SensorId = "pi-sensor-01",
                     Temperature = 22.5, Humidity = 60.0, CO2PPM = 415.0 },
-            new() { Id = 2, FirebaseUID = uid, SensorId = "pi-sensor-01",
+            new() { Id = 2, SourceId = "device-123", SensorId = "pi-sensor-01",
                     Temperature = 23.1, Humidity = 58.5, CO2PPM = 420.0 }
         };
 
         _mockDb
-            .Setup(x => x.GetReadingsAsync(uid, 100))
+            .Setup(x => x.GetReadingsAsync(100))
             .ReturnsAsync(expected);
 
         // Act
-        var result = await _sut.GetReadingsAsync(uid, 100);
+        var result = await _sut.GetReadingsAsync(100);
 
         // Assert
         Assert.NotNull(result);
         Assert.Equal(2, result.Count);
-        Assert.All(result, r => Assert.Equal(uid, r.FirebaseUID));
+        Assert.All(result, r => Assert.Equal("device-123", r.SourceId));
     }
 
     [Fact]
     public async Task GetReadingsAsync_NoReadings_ReturnsEmptyList()
     {
         // Arrange
-        const string uid = "uid-no-data";
-
         _mockDb
-            .Setup(x => x.GetReadingsAsync(uid, 100))
+            .Setup(x => x.GetReadingsAsync(100))
             .ReturnsAsync(new List<SensorReading>());
 
         // Act
-        var result = await _sut.GetReadingsAsync(uid, 100);
+        var result = await _sut.GetReadingsAsync(100);
 
         // Assert
         Assert.NotNull(result);
@@ -93,6 +89,6 @@ public class SensorServiceTests
     {
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            _sut.GetReadingsAsync("uid-123", invalidLimit));
+            _sut.GetReadingsAsync(invalidLimit));
     }
 }
