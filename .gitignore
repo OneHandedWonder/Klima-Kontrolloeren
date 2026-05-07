@@ -43,5 +43,9 @@ __screenshots__/
 /.vs
 /Klima-Kontrolloeren-Backend/obj
 /Klima-Kontrolloeren-Backend/appsettings.json
-/Klima-Kontrolloeren-Backend/firebase-service-account.json
 /Klima-Kontrolloeren-Backend/appsettings.Development.json
+/Klima-Kontrolloeren-Backend/publish
+/Klima-Kontrolloeren-Backend/bin
+/Klima-Kontrolloeren-Backend/Properties
+/Klima-Kontrolloeren-Backend/obj
+/Klima-Kontrolloeren-Backend/bin/Debug
