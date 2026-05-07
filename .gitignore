@@ -42,3 +42,14 @@ __screenshots__/
 .env
 /.vs
 /Klima-Kontrolloeren-Backend/obj
+/Klima-Kontrolloeren-Backend/appsettings.json
+/Klima-Kontrolloeren-Backend/appsettings.Development.json
+/Klima-Kontrolloeren-Backend/publish
+/Klima-Kontrolloeren-Backend/bin
+/Klima-Kontrolloeren-Backend/Properties
+/Klima-Kontrolloeren-Backend/obj
+
+# .NET build artifacts (all projects)
+**/bin/
+**/obj/
+**/publish/
