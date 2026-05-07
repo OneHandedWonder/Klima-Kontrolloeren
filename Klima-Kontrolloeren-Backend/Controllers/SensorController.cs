@@ -30,6 +30,9 @@ public class SensorController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetReadings([FromQuery] int limit = 100)
     {
+        if (limit <= 0)
+            return BadRequest(new { error = "limit must be greater than 0." });
+
         var readings = await _sensorService.GetReadingsAsync(limit);
         return Ok(readings);
     }
