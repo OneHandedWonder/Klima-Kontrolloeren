@@ -65,7 +65,7 @@ try:
 
             if data_to_send is not None:
                 try:
-                    response = requests.post(SERVER_URL, json=data_to_send)
+                    response = requests.post(SERVER_URL, json=data_to_send, timeout=10)
                     if response.status_code == 201:
                         print(f"Averaged data sent successfully: {data_to_send}", flush=True)
                     else:
