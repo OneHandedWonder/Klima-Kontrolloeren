@@ -33,6 +33,13 @@ const WMO_EMOJIS = {
   95: '⛈️', 96: '⛈️', 99: '⛈️'
 }
 
+const API_BASE = 'https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/data'
+const AVERAGE_ENDPOINTS = {
+  hourly: `${API_BASE}/daylyAverage`,
+  dayly: `${API_BASE}/weeklyAverage`,
+  weekly: `${API_BASE}/monthlyAverage`
+}
+
 // Reactive state — fetched from actual API
 const temperature = ref(null)
 const humidity = ref(null)
@@ -47,72 +54,71 @@ const weatherCode = ref(null)
 const weatherDesc = ref('—')
 const forecast = ref([])
 
+const graphData = ref({
+  temperature: { unit: '°C', hourly: [], dayly: [], weekly: [] },
+  humidity: { unit: '%', hourly: [], dayly: [], weekly: [] },
+  co2: { unit: 'ppm', hourly: [], dayly: [], weekly: [] }
+})
+
 const lastUpdated = ref(null)
 const justUpdated = ref(false)
 let refreshInterval = null
 let weatherInterval = null
 
-const activeGraph = ref('day')
+const activeGraph = ref('hourly')
 const activeMetric = ref('temperature')
 
-const graphData = {
-  temperature: {
-    unit: '°C',
-    day: [
-      { label: '00:00', value: 19.8 }, { label: '03:00', value: 19.2 },
-      { label: '06:00', value: 19.5 }, { label: '09:00', value: 21.0 },
-      { label: '12:00', value: 22.4 }, { label: '15:00', value: 23.1 },
-      { label: '18:00', value: 22.8 }, { label: '21:00', value: 21.3 }
-    ],
-    week: [
-      { label: 'Mon', value: 21.2 }, { label: 'Tue', value: 22.0 },
-      { label: 'Wed', value: 20.5 }, { label: 'Thu', value: 23.1 },
-      { label: 'Fri', value: 22.7 }, { label: 'Sat', value: 21.8 },
-      { label: 'Sun', value: 20.9 }
-    ],
-    month: [
-      { label: 'Wk 1', value: 21.5 }, { label: 'Wk 2', value: 22.1 },
-      { label: 'Wk 3', value: 20.8 }, { label: 'Wk 4', value: 21.9 }
-    ]
-  },
-  humidity: {
-    unit: '%',
-    day: [
-      { label: '00:00', value: 48 }, { label: '03:00', value: 46 },
-      { label: '06:00', value: 50 }, { label: '09:00', value: 55 },
-      { label: '12:00', value: 58 }, { label: '15:00', value: 62 },
-      { label: '18:00', value: 65 }, { label: '21:00', value: 54 }
-    ],
-    week: [
-      { label: 'Mon', value: 54 }, { label: 'Tue', value: 60 },
-      { label: 'Wed', value: 49 }, { label: 'Thu', value: 63 },
-      { label: 'Fri', value: 58 }, { label: 'Sat', value: 52 },
-      { label: 'Sun', value: 47 }
-    ],
-    month: [
-      { label: 'Wk 1', value: 55 }, { label: 'Wk 2', value: 61 },
-      { label: 'Wk 3', value: 50 }, { label: 'Wk 4', value: 57 }
-    ]
-  },
-  co2: {
-    unit: 'ppm',
-    day: [
-      { label: '00:00', value: 520 }, { label: '03:00', value: 490 },
-      { label: '06:00', value: 540 }, { label: '09:00', value: 720 },
-      { label: '12:00', value: 950 }, { label: '15:00', value: 880 },
-      { label: '18:00', value: 1050 }, { label: '21:00', value: 760 }
-    ],
-    week: [
-      { label: 'Mon', value: 750 }, { label: 'Tue', value: 820 },
-      { label: 'Wed', value: 680 }, { label: 'Thu', value: 910 },
-      { label: 'Fri', value: 870 }, { label: 'Sat', value: 620 },
-      { label: 'Sun', value: 580 }
-    ],
-    month: [
-      { label: 'Wk 1', value: 720 }, { label: 'Wk 2', value: 810 },
-      { label: 'Wk 3', value: 650 }, { label: 'Wk 4', value: 790 }
-    ]
+function formatGraphLabel(timePeriod, period, index) {
+  if (!timePeriod) return String(index + 1)
+
+  const raw = String(timePeriod)
+
+  // Helper to parse incoming timestamp (assume UTC if no timezone provided)
+  function parseUtcString(s) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      return new Date(s + 'T00:00:00Z')
+    }
+    // if string already contains timezone info (Z or ±hh:mm), use as-is
+    if (s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s)
+    // otherwise assume it's UTC local-formatted and append Z
+    return new Date(s + 'Z')
   }
+
+  try {
+    const dt = parseUtcString(raw)
+    if (Number.isNaN(dt.getTime())) return String(index + 1)
+
+    if (period === 'hourly') {
+      return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+
+    if (period === 'dayly') {
+      return new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt)
+    }
+
+    if (period === 'weekly') {
+      // Show the week start date in local format, e.g. "12 May"
+      return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(dt)
+    }
+
+    return `Wk ${index + 1}`
+  } catch (e) {
+    return String(index + 1)
+  }
+}
+
+function mapAverageSeries(rows, period, metricKey) {
+  if (!Array.isArray(rows)) return []
+
+  return rows.map((row, index) => {
+    const rawTime = row.timePeriod ?? row.recordedAt ?? null
+    const value = row[metricKey] ?? row[metricKey.replace(/^average/, '').charAt(0).toLowerCase() + metricKey.replace(/^average/, '').slice(1)] ?? null
+    return {
+      label: formatGraphLabel(rawTime, period, index),
+      value,
+      missing: value === null || value === undefined
+    }
+  })
 }
 
 const tempStatus = computed(() => {
@@ -153,16 +159,20 @@ const co2IndicatorPos = computed(() => {
   return Math.min(100, Math.max(0, ((co2.value - 300) / 1700) * 100))
 })
 
-const currentGraphData = computed(() => graphData[activeMetric.value][activeGraph.value])
-const currentUnit = computed(() => graphData[activeMetric.value].unit)
+const currentGraphData = computed(() => graphData.value[activeMetric.value][activeGraph.value])
+const currentUnit = computed(() => graphData.value[activeMetric.value].unit)
 const weatherEmoji = computed(() => WMO_EMOJIS[weatherCode.value] || '🌡️')
 const sensorStatus = computed(() => (sensorOnline.value === null ? 'connecting' : (sensorOnline.value ? 'online' : 'offline')))
 const sensorStatusText = computed(() => (sensorOnline.value === null ? 'Connecting...' : (sensorOnline.value ? 'Sensor online' : 'Sensor offline')))
+const hoveredIndex = ref(-1)
 
 const graphAxisMax = computed(() => {
   const data = currentGraphData.value
   if (!data.length) return 100
-  const maxVal = Math.max(...data.map(d => d.value))
+  // Exclude missing/null values and zeros (zeros usually indicate missing for these sensors)
+  const values = data.map(d => d.value).filter(v => typeof v === 'number' && !Number.isNaN(v) && v !== 0)
+  if (!values.length) return 100
+  const maxVal = Math.max(...values)
   const tickStep = { temperature: 5, humidity: 20, co2: 400 }[activeMetric.value] || 10
   return Math.ceil(maxVal / tickStep) * tickStep
 })
@@ -192,13 +202,26 @@ const graphBars = computed(() => {
   const slotW = chartW / data.length
   const barW = slotW * 0.55
   return data.map((d, i) => {
-    const barH = (d.value / axisMax) * chartH
+    const value = typeof d.value === 'number' ? d.value : null
+    const barH = (value !== null && axisMax > 0) ? (value / axisMax) * chartH : 0
+    // Choose label density based on active graph type.
+    // For the 'weekly' view we expect a rolling ~30-day series, so show fewer labels.
+    const maxLabels = activeGraph.value === 'weekly' ? 10 : 12
+    const step = Math.max(1, Math.ceil(data.length / maxLabels))
+    const showLabel = (i % step) === 0
+    const rotate = data.length > maxLabels
+
     return {
       label: d.label,
       x: leftM + i * slotW + (slotW - barW) / 2,
       y: topPad + chartH - barH,
       barH,
       barWidth: barW,
+      missing: d.missing,
+      valueLabel: d.missing || value === null ? '—' : Number(value).toFixed(activeMetric.value === 'co2' ? 0 : 1),
+      valueLabelY: topPad + chartH - barH - 4,
+      showLabel,
+      rotate,
       labelX: leftM + i * slotW + slotW / 2,
       labelY: topPad + chartH + 14
     }
@@ -212,8 +235,52 @@ function statusText(status) {
   return '—'
 }
 
+async function fetchAverageData() {
+  try {
+    const [hourlyResponse, daylyResponse, weeklyResponse] = await Promise.all([
+      axios.get(AVERAGE_ENDPOINTS.hourly),
+      axios.get(AVERAGE_ENDPOINTS.dayly),
+      axios.get(AVERAGE_ENDPOINTS.weekly)
+    ])
+
+    graphData.value = {
+      temperature: {
+        unit: '°C',
+        hourly: mapAverageSeries(hourlyResponse.data, 'hourly', 'averageTemperature'),
+        dayly: mapAverageSeries(daylyResponse.data, 'dayly', 'averageTemperature'),
+        weekly: mapAverageSeries(weeklyResponse.data, 'weekly', 'averageTemperature')
+      },
+      humidity: {
+        unit: '%',
+        hourly: mapAverageSeries(hourlyResponse.data, 'hourly', 'averageHumidity'),
+        dayly: mapAverageSeries(daylyResponse.data, 'dayly', 'averageHumidity'),
+        weekly: mapAverageSeries(weeklyResponse.data, 'weekly', 'averageHumidity')
+      },
+      co2: {
+        unit: 'ppm',
+        hourly: mapAverageSeries(hourlyResponse.data, 'hourly', 'averageCO2PPM'),
+        dayly: mapAverageSeries(daylyResponse.data, 'dayly', 'averageCO2PPM'),
+        weekly: mapAverageSeries(weeklyResponse.data, 'weekly', 'averageCO2PPM')
+      }
+    }
+    // Ensure the weekly series represents the last 30 days exactly.
+    function ensureLastN(arr, n) {
+      if (!Array.isArray(arr)) return Array(n).fill({ label: '', value: null, missing: true })
+      if (arr.length >= n) return arr.slice(-n)
+      const pad = Array(n - arr.length).fill({ label: '', value: null, missing: true })
+      return pad.concat(arr)
+    }
+
+    graphData.value.temperature.weekly = ensureLastN(graphData.value.temperature.weekly, 30)
+    graphData.value.humidity.weekly = ensureLastN(graphData.value.humidity.weekly, 30)
+    graphData.value.co2.weekly = ensureLastN(graphData.value.co2.weekly, 30)
+  } catch (error) {
+    console.error('Average data fetch error:', error.message)
+  }
+}
+
 function fetchData() {
-  axios.get('https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/data')
+  axios.get(API_BASE)
     .then(response => {
       console.log('Indoor sensor full response:', response.data)
       // Handle array response — take the latest (first) reading
@@ -263,11 +330,11 @@ function fetchWeather() {
 function fetchAll() {
   fetchData()
   fetchWeather()
+  fetchAverageData()
 }
 
 onMounted(() => {
-  fetchData()
-  fetchWeather()
+  fetchAll()
   refreshInterval = setInterval(fetchData, 30000)
   weatherInterval = setInterval(fetchWeather, 600000)
 })
@@ -409,9 +476,9 @@ onBeforeUnmount(() => {
           <button @click="activeMetric = 'co2'" :class="['metric-graph-btn', { active: activeMetric === 'co2' }]">CO₂</button>
         </div>
         <div class="graph-period-btns">
-          <button @click="activeGraph = 'day'" :class="['period-btn', { active: activeGraph === 'day' }]">Day</button>
-          <button @click="activeGraph = 'week'" :class="['period-btn', { active: activeGraph === 'week' }]">Week</button>
-          <button @click="activeGraph = 'month'" :class="['period-btn', { active: activeGraph === 'month' }]">Month</button>
+          <button @click="activeGraph = 'hourly'" :class="['period-btn', { active: activeGraph === 'hourly' }]">Hourly</button>
+          <button @click="activeGraph = 'dayly'" :class="['period-btn', { active: activeGraph === 'dayly' }]">Dayly</button>
+          <button @click="activeGraph = 'weekly'" :class="['period-btn', { active: activeGraph === 'weekly' }]">Weekly</button>
         </div>
         <div class="card-content">
           <div class="chart-placeholder">
@@ -422,9 +489,28 @@ onBeforeUnmount(() => {
               </g>
               <text x="30" y="5" text-anchor="middle" fill="#5a7f99" font-size="7">{{ currentUnit }}</text>
               <line x1="30" y1="8" x2="30" y2="126" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
-              <g v-for="bar in graphBars" :key="bar.label">
-                <rect :x="bar.x" :y="bar.y" :width="bar.barWidth" :height="bar.barH" fill="#4CAF50" rx="2"/>
-                <text :x="bar.labelX" :y="bar.labelY" text-anchor="middle" fill="#7fa8bf" font-size="8">{{ bar.label }}</text>
+              <g v-for="(bar, idx) in graphBars" :key="bar.label">
+                <rect
+                  :x="bar.x"
+                  :y="bar.y"
+                  :width="bar.barWidth"
+                  :height="bar.barH"
+                  :fill="bar.missing ? 'rgba(255,255,255,0.18)' : '#4CAF50'"
+                  :opacity="bar.missing ? 0.45 : 1"
+                  rx="2"
+                  @mouseenter="hoveredIndex = idx"
+                  @mouseleave="hoveredIndex = -1"
+                />
+                <text v-if="hoveredIndex === idx" :x="bar.labelX" :y="bar.valueLabelY" text-anchor="middle" fill="#d8f0ff" font-size="7.5">{{ bar.valueLabel }}</text>
+                <text v-if="bar.showLabel"
+                      :x="bar.labelX"
+                      :y="bar.labelY"
+                      :transform="bar.rotate ? `rotate(-45 ${bar.labelX} ${bar.labelY})` : undefined"
+                      text-anchor="middle"
+                      fill="#7fa8bf"
+                      :font-size="bar.rotate ? 7 : 8">
+                  {{ bar.label }}
+                </text>
               </g>
             </svg>
           </div>

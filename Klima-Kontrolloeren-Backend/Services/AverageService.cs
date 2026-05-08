@@ -8,31 +8,23 @@ public class AverageService
 {
     public static List<AverageData> CalculateWeeklyAverages(List<SensorReading> readings)
     {
-        // Build last 30 week periods (start date for each week, Monday as start)
-        var now = DateTime.Now.Date;
-        int totalWeeks = 30;
-        // find start of current week (Monday)
-        int diff = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
-        var currentWeekStart = now.AddDays(-diff);
-        var weekStarts = Enumerable.Range(0, totalWeeks)
-            .Select(i => currentWeekStart.AddDays(-7 * (totalWeeks - 1 - i)))
+        // Build last 30 daily periods (one entry per day for the past 30 days)
+        int totalDays = 30;
+        var today = DateTime.Today;
+        var dayStarts = Enumerable.Range(0, totalDays)
+            .Select(i => today.AddDays(-(totalDays - 1 - i)))
             .ToList();
 
-        var byWeek = readings.GroupBy(r =>
-        {
-            var d = r.RecordedAt.Date;
-            int dDiff = ((int)d.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
-            return d.AddDays(-dDiff);
-        }).ToDictionary(g => g.Key, g => g.ToList());
+        var byDay = readings.GroupBy(r => r.RecordedAt.Date).ToDictionary(g => g.Key, g => g.ToList());
 
-        var result = weekStarts.Select((ws, index) =>
+        var result = dayStarts.Select((ds, index) =>
         {
-            byWeek.TryGetValue(ws, out var list);
+            byDay.TryGetValue(ds, out var list);
             if (list != null && list.Count > 0)
             {
                 return new AverageData
                 {
-                    TimePeriod = ws,
+                    TimePeriod = ds,
                     ReadingCount = index + 1,
                     AverageTemperature = list.Average(r => r.Temperature),
                     AverageHumidity = list.Average(r => r.Humidity),
@@ -42,7 +34,7 @@ public class AverageService
 
             return new AverageData
             {
-                TimePeriod = ws,
+                TimePeriod = ds,
                 ReadingCount = index + 1,
                 AverageTemperature = null,
                 AverageHumidity = null,
