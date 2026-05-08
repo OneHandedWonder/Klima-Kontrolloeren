@@ -213,7 +213,7 @@ function statusText(status) {
 }
 
 function fetchData() {
-  axios.get('https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor')
+  axios.get('https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/data')
     .then(response => {
       console.log('Indoor sensor full response:', response.data)
       // Handle array response — take the latest (first) reading
