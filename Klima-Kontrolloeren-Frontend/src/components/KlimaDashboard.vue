@@ -159,6 +159,45 @@ const weatherEmoji = computed(() => WMO_EMOJIS[weatherCode.value] || '🌡️')
 const sensorStatus = computed(() => (sensorOnline.value === null ? 'connecting' : (sensorOnline.value ? 'online' : 'offline')))
 const sensorStatusText = computed(() => (sensorOnline.value === null ? 'Connecting...' : (sensorOnline.value ? 'Sensor online' : 'Sensor offline')))
 
+//indsætter
+const climateAction = computed(() => {
+  if (
+    temperature.value === null ||
+    humidity.value === null ||
+    co2.value === null
+  ) {
+    return 'Waiting for sensor data...'
+  }
+
+  // CO2 priority
+  if (co2.value > 1200) {
+    return '⚠️ Air quality is poor — opening ventilation / recommending window ventilation.'
+  }
+
+  // Temperature handling
+  if (temperature.value > 27) {
+    return '🌡️ Room is too warm — activating cooling or increasing airflow.'
+  }
+
+  if (temperature.value < 15) {
+    return '🥶 Room is too cold — activating heating.'
+  }
+
+  // Humidity handling
+  if (humidity.value > 70) {
+    return '💧 Humidity is too high — increasing ventilation to reduce moisture.'
+  }
+
+  if (humidity.value < 30) {
+    return '🌵 Air is too dry — reducing ventilation or recommending humidification.'
+  }
+
+  return '✅ Indoor climate is stable — no automatic action needed.'
+})
+
+//indsæt slut //
+
+
 const graphAxisMax = computed(() => {
   const data = currentGraphData.value
   if (!data.length) return 100
@@ -213,7 +252,7 @@ function statusText(status) {
 }
 
 function fetchData() {
-  axios.get('https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor')
+  axios.get('https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/data')
     .then(response => {
       console.log('Indoor sensor full response:', response.data)
       // Handle array response — take the latest (first) reading
@@ -432,6 +471,19 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    
+
+    <!-- insats start -->
+    <div class="system-feedback">
+      <h3>Automatic Climate System</h3>
+      <p class="system-feedback-text">
+        {{ climateAction }}
+      </p>
+    </div>
+    <!-- insats sluk -->
+
+    
+
     <div class="button-section">
       <button @click="fetchAll" class="refresh-btn">Refresh All</button>
       <div class="update-status">
@@ -448,6 +500,30 @@ onBeforeUnmount(() => {
   </div>
 </template>
 
+
+
+
 <style scoped>
-/* Component-level tweaks can go here; main styles loaded globally. */
+/* Indsat, Component-level tweaks can go here; main styles loaded globally. */
+
+.system-feedback {
+  margin-top: 20px;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+}
+
+.system-feedback h3 {
+  margin-bottom: 10px;
+  color: #ffffff;
+  font-size: 1.1rem;
+}
+
+.system-feedback-text {
+  color: #cfe8f7;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
 </style>
