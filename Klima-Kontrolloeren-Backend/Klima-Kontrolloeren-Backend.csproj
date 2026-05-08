@@ -13,4 +13,11 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
+  <!-- Exclude the local 'publish' output folder from being treated as project content
+       to avoid nested publish/publish copies when publishing into './publish'. -->
+  <ItemGroup>
+    <None Remove="publish\**" />
+    <Content Remove="publish\**" />
+  </ItemGroup>
+
 </Project>
