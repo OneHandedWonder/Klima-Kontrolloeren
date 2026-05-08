@@ -159,7 +159,7 @@ const weatherEmoji = computed(() => WMO_EMOJIS[weatherCode.value] || '🌡️')
 const sensorStatus = computed(() => (sensorOnline.value === null ? 'connecting' : (sensorOnline.value ? 'online' : 'offline')))
 const sensorStatusText = computed(() => (sensorOnline.value === null ? 'Connecting...' : (sensorOnline.value ? 'Sensor online' : 'Sensor offline')))
 
-//indsætter
+
 const climateAction = computed(() => {
   if (
     temperature.value === null ||
@@ -195,7 +195,7 @@ const climateAction = computed(() => {
   return '✅ Indoor climate is stable — no automatic action needed.'
 })
 
-//indsæt slut //
+
 
 
 const graphAxisMax = computed(() => {
@@ -473,14 +473,13 @@ onBeforeUnmount(() => {
 
     
 
-    <!-- insats start -->
     <div class="system-feedback">
       <h3>Automatic Climate System</h3>
       <p class="system-feedback-text">
         {{ climateAction }}
       </p>
     </div>
-    <!-- insats sluk -->
+
 
     
 
@@ -504,7 +503,7 @@ onBeforeUnmount(() => {
 
 
 <style scoped>
-/* Indsat, Component-level tweaks can go here; main styles loaded globally. */
+/* Component-level tweaks can go here; main styles loaded globally. */
 
 .system-feedback {
   margin-top: 20px;
