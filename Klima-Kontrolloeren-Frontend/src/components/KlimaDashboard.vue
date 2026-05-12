@@ -1,13 +1,195 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { firebaseAuth } from '../firebase'
 
-const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast' +
-  '?latitude=55.6415&longitude=12.0803' +
-  '&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m' +
-  '&daily=temperature_2m_max,weather_code' +
-  '&timezone=Europe%2FCopenhagen' +
-  '&forecast_days=6'
+const router = useRouter()
+
+// User authentication state
+const currentUser = ref(null)
+const userUID = ref(null)
+const userSensors = ref([])
+const authInitialized = ref(false)
+
+// Initialize user data from Firebase
+async function initializeUser() {
+  if (!firebaseAuth || !firebaseAuth.currentUser) {
+    authInitialized.value = true
+    return
+  }
+
+  currentUser.value = firebaseAuth.currentUser
+  
+  try {
+    // Get ID token from Firebase user
+    const idToken = await firebaseAuth.currentUser.getIdToken()
+    
+    // Call backend to get UID and sensors
+    const response = await axios.get(
+      `https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/auth/getUserUID`,
+      { params: { token: idToken } }
+    )
+    
+    userUID.value = response.data.uid
+    
+    // Now fetch the user's sensors
+    const sensorResponse = await axios.get(
+      `https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor`,
+      { params: { uid: userUID.value } }
+    )
+    
+    // Check if user is enabled from sensor response
+    if (Array.isArray(sensorResponse.data) && sensorResponse.data.length > 0) {
+      const userData = sensorResponse.data[0]
+      console.log('User data from sensor endpoint:', userData)
+      console.log('enabled field:', userData.enabled)
+      
+      if (userData.enabled === false) {
+        console.warn('User is disabled in the backend:', userUID.value)
+        // Sign out and redirect to sign-in page
+        if (firebaseAuth) {
+          try {
+            await firebaseAuth.signOut()
+            console.log('User signed out successfully')
+          } catch (error) {
+            console.error('Failed to sign out:', error)
+          }
+        }
+        // Redirect to sign-in page
+        router.push('/signin')
+        return
+      }
+      
+      userSensors.value = userData.sensors || []
+      console.log('User sensors loaded:', userSensors.value)
+    }
+  } catch (error) {
+    console.error('Failed to initialize user data:', error.message)
+  }
+  
+  authInitialized.value = true
+}
+
+// Dynamic Open-Meteo URL builder — defaults to Roskilde
+const weatherLat = ref(55.6415)
+const weatherLon = ref(12.0803)
+const selectedCity = ref('Roskilde, DK')
+
+function buildOpenMeteoUrl(lat, lon) {
+  const base = 'https://api.open-meteo.com/v1/forecast'
+  const params = []
+  params.push(`latitude=${encodeURIComponent(lat)}`)
+  params.push(`longitude=${encodeURIComponent(lon)}`)
+  params.push('current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m')
+  params.push('hourly=temperature_2m,relative_humidity_2m')
+  params.push('daily=temperature_2m_max,weather_code')
+  params.push('timezone=auto')
+  params.push('forecast_days=6')
+  params.push('past_days=31')
+  return base + '?' + params.join('&')
+}
+
+// City search (Open-Meteo Geocoding)
+const cityQuery = ref('')
+const citySuggestions = ref([])
+const searchingCity = ref(false)
+let citySearchTimeout = null
+
+function searchCity(query) {
+  cityQuery.value = query
+  citySuggestions.value = []
+  if (citySearchTimeout) clearTimeout(citySearchTimeout)
+  if (!query || query.length < 2) return
+  citySearchTimeout = setTimeout(async () => {
+    searchingCity.value = true
+    try {
+      const res = await axios.get('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(query) + '&count=6')
+      citySuggestions.value = (res.data && res.data.results) ? res.data.results.map(r => ({
+        name: r.name + (r.admin1 ? ', ' + r.admin1 : '') + (r.country ? ', ' + r.country : ''),
+        latitude: r.latitude,
+        longitude: r.longitude,
+        timezone: r.timezone
+      })) : []
+    } catch (e) {
+      citySuggestions.value = []
+    } finally {
+      searchingCity.value = false
+    }
+  }, 300)
+}
+
+function selectCity(s) {
+  if (!s) return
+  selectedCity.value = s.name
+  weatherLat.value = s.latitude
+  weatherLon.value = s.longitude
+  citySuggestions.value = []
+  cityQuery.value = ''
+  // Refresh weather for the new location
+  fetchWeather()
+}
+
+// Favorites handling (stored in localStorage)
+const favorites = ref([])
+const FAVORITES_KEY = 'klima:favorites'
+
+function loadFavorites() {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) favorites.value = parsed
+  } catch (e) {
+    // ignore
+  }
+}
+
+function saveFavorites() {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites.value))
+  } catch (e) {
+    // ignore
+  }
+}
+
+function addFavorite() {
+  // add currently selected city
+  if (!selectedCity.value || !weatherLat.value || !weatherLon.value) return
+  // avoid duplicates by name+coords
+  const exists = favorites.value.find(f => f.name === selectedCity.value && f.lat === weatherLat.value && f.lon === weatherLon.value)
+  if (exists) return
+  favorites.value.push({ name: selectedCity.value, lat: weatherLat.value, lon: weatherLon.value })
+  saveFavorites()
+}
+
+function removeFavorite(idx) {
+  if (idx < 0 || idx >= favorites.value.length) return
+  favorites.value.splice(idx, 1)
+  saveFavorites()
+}
+
+function selectFavorite(fav) {
+  if (!fav) return
+  selectedCity.value = fav.name
+  weatherLat.value = fav.lat
+  weatherLon.value = fav.lon
+  fetchWeather()
+}
+
+const isFavorited = computed(() => {
+  return favorites.value.some(f => f.name === selectedCity.value && f.lat === weatherLat.value && f.lon === weatherLon.value)
+})
+
+function toggleFavorite() {
+  const idx = favorites.value.findIndex(f => f.name === selectedCity.value && f.lat === weatherLat.value && f.lon === weatherLon.value)
+  if (idx >= 0) {
+    favorites.value.splice(idx, 1)
+    saveFavorites()
+    return
+  }
+  addFavorite()
+}
 
 const WMO_DESCRIPTIONS = {
   0: 'Clear sky',
@@ -53,6 +235,19 @@ const outdoorWind = ref(null)
 const weatherCode = ref(null)
 const weatherDesc = ref('—')
 const forecast = ref([])
+const pastReadings = ref([])
+const pastWeatherReadings = ref({
+  temperature: {
+    hourly: [],
+    daily: [],
+    weekly: []
+  },
+  humidity: {
+    hourly: [],
+    daily: [],
+    weekly: []
+  }
+})
 
 const graphData = ref({
   temperature: { unit: '°C', hourly: [], dayly: [], weekly: [] },
@@ -60,13 +255,21 @@ const graphData = ref({
   co2: { unit: 'ppm', hourly: [], dayly: [], weekly: [] }
 })
 
+const pastReadingsGraphData = ref({
+  temperature: [],
+  humidity: []
+})
+
 const lastUpdated = ref(null)
 const justUpdated = ref(false)
 let refreshInterval = null
 let weatherInterval = null
+let enabledCheckInterval = null
 
 const activeGraph = ref('hourly')
 const activeMetric = ref('temperature')
+const activePastMetric = ref('temperature')
+const activeWeatherGraphPeriod = ref('hourly')
 
 function formatGraphLabel(timePeriod, period, index) {
   if (!timePeriod) return String(index + 1)
@@ -164,7 +367,8 @@ const currentUnit = computed(() => graphData.value[activeMetric.value].unit)
 const weatherEmoji = computed(() => WMO_EMOJIS[weatherCode.value] || '🌡️')
 const sensorStatus = computed(() => (sensorOnline.value === null ? 'connecting' : (sensorOnline.value ? 'online' : 'offline')))
 const sensorStatusText = computed(() => (sensorOnline.value === null ? 'Connecting...' : (sensorOnline.value ? 'Sensor online' : 'Sensor offline')))
-const hoveredIndex = ref(-1)
+const mainHoveredIndex = ref(-1)
+const pastHoveredIndex = ref(-1)
 
 
 const climateAction = computed(() => {
@@ -205,27 +409,35 @@ const climateAction = computed(() => {
 
 
 
-const graphAxisMax = computed(() => {
+// Compute axis range (min/max) so negative values are supported correctly
+const graphAxisRange = computed(() => {
   const data = currentGraphData.value
-  if (!data.length) return 100
-  // Exclude missing/null values and zeros (zeros usually indicate missing for these sensors)
-  const values = data.map(d => d.value).filter(v => typeof v === 'number' && !Number.isNaN(v) && v !== 0)
-  if (!values.length) return 100
+  if (!data.length) return { min: 0, max: 100, tickStep: 10 }
+  // Exclude missing/null values (but allow zero and negatives)
+  const values = data.map(d => d.value).filter(v => typeof v === 'number' && !Number.isNaN(v))
+  if (!values.length) return { min: 0, max: 100, tickStep: 10 }
+  const minVal = Math.min(...values)
   const maxVal = Math.max(...values)
   const tickStep = { temperature: 5, humidity: 20, co2: 400 }[activeMetric.value] || 10
-  return Math.ceil(maxVal / tickStep) * tickStep
+  let minTick = Math.floor(minVal / tickStep) * tickStep
+  let maxTick = Math.ceil(maxVal / tickStep) * tickStep
+  if (minTick === maxTick) {
+    // Provide a small range
+    maxTick = minTick + tickStep
+  }
+  return { min: minTick, max: maxTick, tickStep }
 })
 
 const yAxisTicks = computed(() => {
   const data = currentGraphData.value
   if (!data.length) return []
-  const axisMax = graphAxisMax.value
-  const tickStep = { temperature: 5, humidity: 20, co2: 400 }[activeMetric.value] || 10
+  const { min, max, tickStep } = graphAxisRange.value
   const chartH = 118
   const topPad = 8
   const ticks = []
-  for (let v = 0; v <= axisMax; v += tickStep) {
-    ticks.push({ label: v.toString(), y: topPad + chartH * (1 - v / axisMax) })
+  for (let v = min; v <= max; v += tickStep) {
+    const rel = (v - min) / (max - min)
+    ticks.push({ label: v.toString(), y: topPad + chartH * (1 - rel) })
   }
   return ticks
 })
@@ -237,18 +449,17 @@ const graphBars = computed(() => {
   const chartW = 262
   const chartH = 118
   const topPad = 8
-  const axisMax = graphAxisMax.value
+  const { min: axisMin, max: axisMax } = graphAxisRange.value
   const slotW = chartW / data.length
   const barW = slotW * 0.55
   return data.map((d, i) => {
     const value = typeof d.value === 'number' ? d.value : null
-    const barH = (value !== null && axisMax > 0) ? (value / axisMax) * chartH : 0
-    // Choose label density based on active graph type.
-    // For the 'weekly' view we expect a rolling ~30-day series, so show fewer labels.
+    const barH = (value !== null && axisMax > axisMin) ? ((value - axisMin) / (axisMax - axisMin)) * chartH : 0
     const maxLabels = activeGraph.value === 'weekly' ? 10 : 12
     const step = Math.max(1, Math.ceil(data.length / maxLabels))
     const showLabel = (i % step) === 0
     const rotate = data.length > maxLabels
+    const status = d.missing ? 'no-data' : getStatusForValue(activeMetric.value, value)
 
     return {
       label: d.label,
@@ -262,7 +473,9 @@ const graphBars = computed(() => {
       showLabel,
       rotate,
       labelX: leftM + i * slotW + slotW / 2,
-      labelY: topPad + chartH + 14
+      labelY: topPad + chartH + 14,
+      status,
+      color: statusColors[status] || '#4CAF50'
     }
   })
 })
@@ -274,12 +487,120 @@ function statusText(status) {
   return '—'
 }
 
+// Helper function to determine status for any value and metric type
+function getStatusForValue(metric, value) {
+  if (value === null || value === undefined || typeof value !== 'number' || Number.isNaN(value)) return 'no-data'
+  
+  if (metric === 'temperature') {
+    if (value >= 18 && value <= 24) return 'good'
+    if ((value >= 15 && value < 18) || (value > 24 && value <= 27)) return 'warning'
+    return 'bad'
+  }
+  
+  if (metric === 'humidity') {
+    if (value >= 40 && value <= 60) return 'good'
+    if ((value >= 30 && value < 40) || (value > 60 && value <= 70)) return 'warning'
+    return 'bad'
+  }
+  
+  if (metric === 'co2') {
+    if (value < 800) return 'good'
+    if (value <= 1200) return 'warning'
+    return 'bad'
+  }
+  
+  return 'no-data'
+}
+
+// Color mapping for status
+const statusColors = {
+  good: '#4CAF50',
+  warning: '#FF9800',
+  bad: '#f44336',
+  'no-data': 'rgba(255,255,255,0.18)'
+}
+
+const pastGraphData = computed(() => pastWeatherReadings.value[activePastMetric.value][activeWeatherGraphPeriod.value] || [])
+const pastGraphUnit = computed(() => {
+  if (activePastMetric.value === 'temperature') return '°C'
+  if (activePastMetric.value === 'humidity') return '%'
+  return ''
+})
+
+// Compute past graph axis range supporting negatives
+const pastGraphAxisRange = computed(() => {
+  const data = pastGraphData.value
+  if (!data.length) return { min: 0, max: 100, tickStep: 10 }
+  const values = data.map(d => d.value).filter(v => typeof v === 'number' && !Number.isNaN(v))
+  if (!values.length) return { min: 0, max: 100, tickStep: 10 }
+  const minVal = Math.min(...values)
+  const maxVal = Math.max(...values)
+  const tickStep = { temperature: 5, humidity: 20 }[activePastMetric.value] || 10
+  let minTick = Math.floor(minVal / tickStep) * tickStep
+  let maxTick = Math.ceil(maxVal / tickStep) * tickStep
+  if (minTick === maxTick) maxTick = minTick + tickStep
+  return { min: minTick, max: maxTick, tickStep }
+})
+
+const pastGraphYAxisTicks = computed(() => {
+  const data = pastGraphData.value
+  if (!data.length) return []
+  const { min, max, tickStep } = pastGraphAxisRange.value
+  const chartH = 100
+  const topPad = 8
+  const ticks = []
+  for (let v = min; v <= max; v += tickStep) {
+    const rel = (v - min) / (max - min)
+    ticks.push({ label: v.toString(), y: topPad + chartH * (1 - rel) })
+  }
+  return ticks
+})
+
+const pastGraphBars = computed(() => {
+  const data = pastGraphData.value
+  if (!data.length) return []
+  const leftM = 30
+  const chartW = 262
+  const chartH = 100
+  const topPad = 8
+  const { min: axisMin, max: axisMax } = pastGraphAxisRange.value
+  const slotW = chartW / data.length
+  const barW = slotW * 0.55
+  
+  const maxLabels = activeWeatherGraphPeriod.value === 'weekly' ? 10 : 12
+  const step = Math.max(1, Math.ceil(data.length / maxLabels))
+  
+  return data.map((d, i) => {
+    const value = typeof d.value === 'number' ? d.value : null
+    const barH = (value !== null && axisMax > axisMin) ? ((value - axisMin) / (axisMax - axisMin)) * chartH : 0
+    const showLabel = (i % step) === 0
+    const rotate = data.length > maxLabels
+
+    return {
+      label: d.label,
+      x: leftM + i * slotW + (slotW - barW) / 2,
+      y: topPad + chartH - barH,
+      barH,
+      barWidth: barW,
+      missing: d.missing,
+      valueLabel: d.missing || value === null ? '—' : Number(value).toFixed(1),
+      valueLabelY: topPad + chartH - barH - 4,
+      showLabel,
+      rotate,
+      labelX: leftM + i * slotW + slotW / 2,
+      labelY: topPad + chartH + 14
+    }
+  })
+})
+
 async function fetchAverageData() {
   try {
+    const params = userUID.value ? { uid: userUID.value } : {}
+    
     const [hourlyResponse, daylyResponse, weeklyResponse] = await Promise.all([
-      axios.get(AVERAGE_ENDPOINTS.hourly),
-      axios.get(AVERAGE_ENDPOINTS.dayly),
-      axios.get(AVERAGE_ENDPOINTS.weekly)
+      axios.get(AVERAGE_ENDPOINTS.hourly, { params }),
+      axios.get(AVERAGE_ENDPOINTS.dayly, { params }),
+      axios.get(AVERAGE_ENDPOINTS.weekly, { params })
     ])
 
     graphData.value = {
@@ -318,8 +639,40 @@ async function fetchAverageData() {
   }
 }
 
+async function checkUserEnabled() {
+  if (!userUID.value) return
+  
+  try {
+    const sensorResponse = await axios.get(
+      `https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor`,
+      { params: { uid: userUID.value } }
+    )
+    
+    if (Array.isArray(sensorResponse.data) && sensorResponse.data.length > 0) {
+      const userData = sensorResponse.data[0]
+      
+      if (userData.enabled === false) {
+        console.warn('User was disabled while logged in:', userUID.value)
+        // Sign out and redirect
+        if (firebaseAuth) {
+          try {
+            await firebaseAuth.signOut()
+          } catch (error) {
+            console.error('Failed to sign out:', error)
+          }
+        }
+        router.push('/signin')
+      }
+    }
+  } catch (error) {
+    console.error('Failed to check user enabled status:', error.message)
+  }
+}
+
 function fetchData() {
-  axios.get(API_BASE)
+  const endpoint = userUID.value ? `${API_BASE}?uid=${userUID.value}` : API_BASE
+  
+  axios.get(endpoint)
     .then(response => {
       console.log('Indoor sensor full response:', response.data)
       // Handle array response — take the latest (first) reading
@@ -346,7 +699,7 @@ function fetchData() {
 }
 
 function fetchWeather() {
-  axios.get(OPEN_METEO_URL)
+  axios.get(buildOpenMeteoUrl(weatherLat.value, weatherLon.value))
     .then(response => {
       const current = response.data.current
       outdoorTemp.value = current.temperature_2m
@@ -362,8 +715,118 @@ function fetchWeather() {
         const localDate = new Date(y, m - 1, d)
         return { day: dayNames[localDate.getDay()], temp: Math.round(daily.temperature_2m_max[i + 1]), emoji: WMO_EMOJIS[daily.weather_code[i + 1]] || '🌡️' }
       })
+
+      // Process hourly data for 24-hour period
+      if (response.data.hourly && response.data.hourly.time) {
+        const hourly = response.data.hourly
+        const times = hourly.time
+        const temps = hourly.temperature_2m
+        const humidities = hourly.relative_humidity_2m
+        
+        // Get the last 24 hours of data
+        const last24Index = Math.max(0, times.length - 24)
+        const last24Times = times.slice(last24Index)
+        const last24Temps = temps.slice(last24Index)
+        const last24Humidities = humidities.slice(last24Index)
+        
+        pastWeatherReadings.value.temperature.hourly = last24Times.map((timeStr, idx) => {
+          const dt = new Date(timeStr + 'Z')
+          const label = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          return {
+            label,
+            value: last24Temps[idx],
+            missing: last24Temps[idx] === null || last24Temps[idx] === undefined
+          }
+        })
+        
+        pastWeatherReadings.value.humidity.hourly = last24Times.map((timeStr, idx) => {
+          const dt = new Date(timeStr + 'Z')
+          const label = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          return {
+            label,
+            value: last24Humidities[idx],
+            missing: last24Humidities[idx] === null || last24Humidities[idx] === undefined
+          }
+        })
+
+        // Calculate daily aggregates from hourly data for 7 and 30 day periods
+        const dailyAggregates = {}
+        times.forEach((timeStr, idx) => {
+          const date = new Date(timeStr + 'Z')
+          const dateKey = date.toISOString().split('T')[0]
+          
+          if (!dailyAggregates[dateKey]) {
+            dailyAggregates[dateKey] = {
+              temps: [],
+              humidities: [],
+              date: dateKey
+            }
+          }
+          
+          if (temps[idx] !== null && temps[idx] !== undefined) {
+            dailyAggregates[dateKey].temps.push(temps[idx])
+          }
+          if (humidities[idx] !== null && humidities[idx] !== undefined) {
+            dailyAggregates[dateKey].humidities.push(humidities[idx])
+          }
+        })
+
+        // Convert to array and sort by date
+        const sortedDates = Object.values(dailyAggregates)
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+        // 7-day data
+        const last7Days = sortedDates.slice(-7)
+        pastWeatherReadings.value.temperature.daily = last7Days.map((day) => {
+          const dt = new Date(day.date + 'T00:00:00Z')
+          const label = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt)
+          const avgTemp = day.temps.length > 0 ? day.temps.reduce((a, b) => a + b) / day.temps.length : null
+          return {
+            label,
+            value: avgTemp,
+            missing: avgTemp === null
+          }
+        })
+        
+        pastWeatherReadings.value.humidity.daily = last7Days.map((day) => {
+          const dt = new Date(day.date + 'T00:00:00Z')
+          const label = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt)
+          const avgHumidity = day.humidities.length > 0 ? day.humidities.reduce((a, b) => a + b) / day.humidities.length : null
+          return {
+            label,
+            value: avgHumidity,
+            missing: avgHumidity === null
+          }
+        })
+
+        // 30-day data
+        const last30Days = sortedDates.slice(-30)
+        pastWeatherReadings.value.temperature.weekly = last30Days.map((day) => {
+          const dt = new Date(day.date + 'T00:00:00Z')
+          const label = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(dt)
+          const avgTemp = day.temps.length > 0 ? day.temps.reduce((a, b) => a + b) / day.temps.length : null
+          return {
+            label,
+            value: avgTemp,
+            missing: avgTemp === null
+          }
+        })
+        
+        pastWeatherReadings.value.humidity.weekly = last30Days.map((day) => {
+          const dt = new Date(day.date + 'T00:00:00Z')
+          const label = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(dt)
+          const avgHumidity = day.humidities.length > 0 ? day.humidities.reduce((a, b) => a + b) / day.humidities.length : null
+          return {
+            label,
+            value: avgHumidity,
+            missing: avgHumidity === null
+          }
+        })
+      }
     })
-    .catch(() => {})
+    .catch(err => {
+      console.error('Weather fetch error:', err)
+    })
 }
 
 function fetchAll() {
@@ -373,22 +836,52 @@ function fetchAll() {
 }
 
 onMounted(() => {
-  fetchAll()
-  refreshInterval = setInterval(fetchData, 30000)
-  weatherInterval = setInterval(fetchWeather, 600000)
+  loadFavorites()
+  // Initialize user and sensors first, then fetch data
+  initializeUser().then(() => {
+    fetchAll()
+    refreshInterval = setInterval(fetchData, 30000)
+    weatherInterval = setInterval(fetchWeather, 600000)
+    enabledCheckInterval = setInterval(checkUserEnabled, 30000)
+  })
 })
+
+async function signOut() {
+  try {
+    if (firebaseAuth) {
+      await firebaseAuth.signOut()
+      router.push('/signin')
+    }
+  } catch (error) {
+    console.error('Sign out error:', error)
+  }
+}
 
 onBeforeUnmount(() => {
   clearInterval(refreshInterval)
   clearInterval(weatherInterval)
+  clearInterval(enabledCheckInterval)
 })
 </script>
 
 <template>
-  <div class="container">
+  <div v-if="!authInitialized" class="auth-loading-container">
+    <p>Initializing user data...</p>
+  </div>
+  <div v-else class="container">
     <header class="header">
-      <h1><span class="title-klima">Klima</span><span class="title-dash">-</span><span class="title-kontrol">Kontrolloeren</span></h1>
-      <p class="header-sub">— Indoor Climate Monitor —</p>
+      <div class="header-center">
+        <h1><span class="title-klima">Klima</span><span class="title-dash">-</span><span class="title-kontrol">Kontrolloeren</span></h1>
+        <p class="header-sub">— Indoor Climate Monitor —</p>
+      </div>
+      <div class="header-right">
+        <div v-if="currentUser" class="user-info">
+          <div class="user-avatar">{{ currentUser.email?.charAt(0).toUpperCase() || '?' }}</div>
+          <div class="user-details">
+            <p class="user-email">{{ currentUser.email }}</p>
+          </div>
+        </div>
+      </div>
     </header>
 
     <!-- Indoor main display (template body adapted from legacy HTML) -->
@@ -476,32 +969,117 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- System feedback bar -->
+    <div class="system-feedback-bar">
+      <h3>Automatic Climate System</h3>
+      <p class="system-feedback-text">{{ climateAction }}</p>
+    </div>
+
     <!-- Outdoor + graphs -->
     <div class="dashboard-container">
-      <div class="dashboard-card weather-card">
-        <h3>Outdoor Weather</h3>
-        <p class="subtitle">Roskilde, DK — open-meteo.com</p>
-        <div class="card-content">
-          <div class="weather-current">
-            <div class="weather-main">
-              <span class="weather-emoji">{{ weatherEmoji }}</span>
-              <span class="outdoor-temp">{{ outdoorTemp !== null ? outdoorTemp : '—' }}°C</span>
+      <div class="dashboard-column">
+        <div class="dashboard-card weather-card">
+          <h3>Outdoor Weather</h3>
+            <div class="card-content weather-layout">
+              <div class="weather-top-row">
+                <div class="weather-main-panel">
+                  <p class="subtitle">{{ selectedCity }}</p>
+                  <div class="weather-current">
+                    <div class="weather-main">
+                      <span class="weather-emoji">{{ weatherEmoji }}</span>
+                      <span class="outdoor-temp">{{ outdoorTemp !== null ? outdoorTemp : '—' }}°C</span>
+                    </div>
+                    <p class="weather-desc">{{ weatherDesc }}</p>
+                    <div class="weather-details">
+                      <span class="weather-detail">💧 {{ outdoorHumidity !== null ? outdoorHumidity : '—' }}%</span>
+                      <span class="weather-detail">💨 {{ outdoorWind !== null ? outdoorWind : '—' }} km/h</span>
+                    </div>
+                  </div>
+
+                  <div class="forecast">
+                    <div class="forecast-day" v-for="day in forecast" :key="day.day">
+                      <span class="forecast-name">{{ day.day }}</span>
+                      <span class="forecast-emoji">{{ day.emoji }}</span>
+                      <span class="forecast-temp">{{ day.temp }}°</span>
+                    </div>
+                  </div>
+                </div>
+
+                <aside class="search-card">
+                  <div class="search-card-header">
+                    <div class="search-card-title">Favorites</div>
+                    <button class="fav-toggle" :class="{ active: isFavorited }" @click="toggleFavorite" aria-label="Toggle favorite">{{ isFavorited ? '★' : '☆' }}</button>
+                  </div>
+                  <div class="city-search">
+                    <input
+                      v-model="cityQuery"
+                      @input="searchCity(cityQuery)"
+                      placeholder="Search city..."
+                      class="city-input"
+                    />
+                    <ul v-if="citySuggestions.length" class="suggestions">
+                      <li v-for="(s, i) in citySuggestions" :key="s.name + i" @click="selectCity(s)">{{ s.name }}</li>
+                    </ul>
+                  </div>
+                  <div class="favorites-panel">
+                    <div class="fav-header"></div>
+                    <div class="favorites-list" :class="{ scrollable: favorites.length > 5 }">
+                      <button v-for="(f, idx) in favorites" :key="f.name + idx" class="fav-item" @click="selectFavorite(f)">
+                        <span class="fav-name">{{ f.name }}</span>
+                        <span class="fav-remove" @click.stop="removeFavorite(idx)">✕</span>
+                      </button>
+                      <div v-if="!favorites.length" class="favorites-empty">No favorites yet.</div>
+                    </div>
+                  </div>
+                </aside>
+              </div>
             </div>
-            <p class="weather-desc">{{ weatherDesc }}</p>
-            <div class="weather-details">
-              <span class="weather-detail">💧 {{ outdoorHumidity !== null ? outdoorHumidity : '—' }}%</span>
-              <span class="weather-detail">💨 {{ outdoorWind !== null ? outdoorWind : '—' }} km/h</span>
-            </div>
+        </div>
+
+        <div class="dashboard-card past-readings-card">
+          <h3>Past Readings — {{ selectedCity }}</h3>
+          <p class="subtitle">Outdoor weather history</p>
+          <div class="past-graph-metric-btns">
+            <button @click="activePastMetric = 'temperature'" :class="['metric-graph-btn', { active: activePastMetric === 'temperature' }]">Temperature</button>
+            <button @click="activePastMetric = 'humidity'" :class="['metric-graph-btn', { active: activePastMetric === 'humidity' }]">Humidity</button>
           </div>
-
-          <div class="weather-divider"></div>
-
-          <div class="forecast">
-            <div class="forecast-day" v-for="day in forecast" :key="day.day">
-              <span class="forecast-name">{{ day.day }}</span>
-              <span class="forecast-emoji">{{ day.emoji }}</span>
-              <span class="forecast-temp">{{ day.temp }}°</span>
-            </div>
+          <div class="past-graph-period-btns">
+            <button @click="activeWeatherGraphPeriod = 'hourly'" :class="['period-btn', { active: activeWeatherGraphPeriod === 'hourly' }]">Daily</button>
+            <button @click="activeWeatherGraphPeriod = 'daily'" :class="['period-btn', { active: activeWeatherGraphPeriod === 'daily' }]">Weekly</button>
+            <button @click="activeWeatherGraphPeriod = 'weekly'" :class="['period-btn', { active: activeWeatherGraphPeriod === 'weekly' }]">Monthly</button>
+          </div>
+          <div class="chart-placeholder">
+            <svg viewBox="0 0 300 140" class="bar-chart past-bar-chart">
+              <g v-for="tick in pastGraphYAxisTicks" :key="tick.label">
+                <line x1="30" :y1="tick.y" x2="292" :y2="tick.y" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+                <text x="27" :y="tick.y + 3" text-anchor="end" fill="#5a7f99" font-size="7">{{ tick.label }}</text>
+              </g>
+              <text x="30" y="5" text-anchor="middle" fill="#5a7f99" font-size="7">{{ pastGraphUnit }}</text>
+              <line x1="30" y1="8" x2="30" y2="118" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+              <g v-for="(bar, idx) in pastGraphBars" :key="bar.label">
+                <rect
+                    :x="bar.x"
+                    :y="bar.y"
+                    :width="bar.barWidth"
+                    :height="bar.barH"
+                    :fill="bar.missing ? 'rgba(255,255,255,0.18)' : '#4CAF50'"
+                    :opacity="bar.missing ? 0.45 : 1"
+                    rx="2"
+                    @mouseenter="pastHoveredIndex = idx"
+                    @mouseleave="pastHoveredIndex = -1"
+                  />
+                  <text v-if="pastHoveredIndex === idx" :x="bar.labelX" :y="bar.valueLabelY" text-anchor="middle" fill="#d8f0ff" font-size="7">{{ bar.valueLabel }}</text>
+                <text v-if="bar.showLabel"
+                      :x="bar.labelX"
+                      :y="bar.labelY"
+                      :transform="bar.rotate ? `rotate(-45 ${bar.labelX} ${bar.labelY})` : undefined"
+                      text-anchor="middle"
+                      fill="#7fa8bf"
+                      :font-size="bar.rotate ? 6.5 : 7.5">
+                  {{ bar.label }}
+                </text>
+              </g>
+            </svg>
           </div>
         </div>
       </div>
@@ -515,9 +1093,9 @@ onBeforeUnmount(() => {
           <button @click="activeMetric = 'co2'" :class="['metric-graph-btn', { active: activeMetric === 'co2' }]">CO₂</button>
         </div>
         <div class="graph-period-btns">
-          <button @click="activeGraph = 'hourly'" :class="['period-btn', { active: activeGraph === 'hourly' }]">Hourly</button>
-          <button @click="activeGraph = 'dayly'" :class="['period-btn', { active: activeGraph === 'dayly' }]">Dayly</button>
-          <button @click="activeGraph = 'weekly'" :class="['period-btn', { active: activeGraph === 'weekly' }]">Weekly</button>
+          <button @click="activeGraph = 'hourly'" :class="['period-btn', { active: activeGraph === 'hourly' }]">Daily</button>
+          <button @click="activeGraph = 'dayly'" :class="['period-btn', { active: activeGraph === 'dayly' }]">Weekly</button>
+          <button @click="activeGraph = 'weekly'" :class="['period-btn', { active: activeGraph === 'weekly' }]">Monthly</button>
         </div>
         <div class="card-content">
           <div class="chart-placeholder">
@@ -534,13 +1112,13 @@ onBeforeUnmount(() => {
                   :y="bar.y"
                   :width="bar.barWidth"
                   :height="bar.barH"
-                  :fill="bar.missing ? 'rgba(255,255,255,0.18)' : '#4CAF50'"
+                  :fill="bar.color"
                   :opacity="bar.missing ? 0.45 : 1"
                   rx="2"
-                  @mouseenter="hoveredIndex = idx"
-                  @mouseleave="hoveredIndex = -1"
+                  @mouseenter="mainHoveredIndex = idx"
+                  @mouseleave="mainHoveredIndex = -1"
                 />
-                <text v-if="hoveredIndex === idx" :x="bar.labelX" :y="bar.valueLabelY" text-anchor="middle" fill="#d8f0ff" font-size="7.5">{{ bar.valueLabel }}</text>
+                <text v-if="mainHoveredIndex === idx" :x="bar.labelX" :y="bar.valueLabelY" text-anchor="middle" fill="#d8f0ff" font-size="7.5">{{ bar.valueLabel }}</text>
                 <text v-if="bar.showLabel"
                       :x="bar.labelX"
                       :y="bar.labelY"
@@ -556,18 +1134,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
-
-    
-
-    <div class="system-feedback">
-      <h3>Automatic Climate System</h3>
-      <p class="system-feedback-text">
-        {{ climateAction }}
-      </p>
-    </div>
-
-
-    
 
     <div class="button-section">
       <button @click="fetchAll" class="refresh-btn">Refresh All</button>
@@ -590,25 +1156,125 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* Component-level tweaks can go here; main styles loaded globally. */
+/* Moved into assets/styles.css*/
 
-.system-feedback {
-  margin-top: 20px;
-  padding: 18px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
-  backdrop-filter: blur(8px);
+.weather-emoji {
+  font-size: 2rem;
+  line-height: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
-.system-feedback h3 {
-  margin-bottom: 10px;
-  color: #ffffff;
-  font-size: 1.1rem;
+.auth-loading-container {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #e1eef8;
+  font-size: 1.2rem;
 }
 
-.system-feedback-text {
-  color: #cfe8f7;
-  font-size: 0.95rem;
-  line-height: 1.5;
+/* Header layout */
+header.header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.header-center {
+  text-align: center;
+}
+
+.header-right {
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sign-out-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  color: #f44336;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.sign-out-btn:hover {
+  background: rgba(244, 67, 54, 0.25);
+  border-color: rgba(244, 67, 54, 0.6);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(100, 200, 255, 0.05));
+  border: 1px solid rgba(88, 166, 255, 0.2);
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #58a6ff, #64c8ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #0d1117;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.user-details {
+  min-width: 0;
+}
+
+.user-email {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #58a6ff;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Responsive weather layout fixes */
+.weather-top-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.weather-main-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.weather-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.outdoor-temp {
+  font-size: clamp(1.5rem, 5vw, 3rem);
+  font-weight: bold;
+}
+
+.search-card {
+  flex-shrink: 0;
+  width: clamp(150px, 30%, 250px);
 }
 </style>

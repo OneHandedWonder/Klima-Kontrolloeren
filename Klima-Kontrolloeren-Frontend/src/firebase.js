@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app'
+import { getAuth } from 'firebase/auth'
 
 const requiredEnvKeys = [
   'VITE_FIREBASE_API_KEY',
@@ -12,6 +13,7 @@ const requiredEnvKeys = [
 const missingKeys = requiredEnvKeys.filter((key) => !import.meta.env[key])
 
 let firebaseApp = null
+let firebaseAuth = null
 
 if (missingKeys.length > 0) {
   // Do not throw here — make firebase optional so the migrated dashboard can run
@@ -31,6 +33,7 @@ if (missingKeys.length > 0) {
   }
 
   firebaseApp = initializeApp(firebaseConfig)
+  firebaseAuth = getAuth(firebaseApp)
 }
 
-export { firebaseApp }
+export { firebaseApp, firebaseAuth }
