@@ -264,6 +264,7 @@ const lastUpdated = ref(null)
 const justUpdated = ref(false)
 let refreshInterval = null
 let weatherInterval = null
+let enabledCheckInterval = null
 
 const activeGraph = ref('hourly')
 const activeMetric = ref('temperature')
@@ -638,6 +639,36 @@ async function fetchAverageData() {
   }
 }
 
+async function checkUserEnabled() {
+  if (!userUID.value) return
+  
+  try {
+    const sensorResponse = await axios.get(
+      `https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor`,
+      { params: { uid: userUID.value } }
+    )
+    
+    if (Array.isArray(sensorResponse.data) && sensorResponse.data.length > 0) {
+      const userData = sensorResponse.data[0]
+      
+      if (userData.enabled === false) {
+        console.warn('User was disabled while logged in:', userUID.value)
+        // Sign out and redirect
+        if (firebaseAuth) {
+          try {
+            await firebaseAuth.signOut()
+          } catch (error) {
+            console.error('Failed to sign out:', error)
+          }
+        }
+        router.push('/signin')
+      }
+    }
+  } catch (error) {
+    console.error('Failed to check user enabled status:', error.message)
+  }
+}
+
 function fetchData() {
   const endpoint = userUID.value ? `${API_BASE}?uid=${userUID.value}` : API_BASE
   
@@ -811,12 +842,25 @@ onMounted(() => {
     fetchAll()
     refreshInterval = setInterval(fetchData, 30000)
     weatherInterval = setInterval(fetchWeather, 600000)
+    enabledCheckInterval = setInterval(checkUserEnabled, 30000)
   })
 })
+
+async function signOut() {
+  try {
+    if (firebaseAuth) {
+      await firebaseAuth.signOut()
+      router.push('/signin')
+    }
+  } catch (error) {
+    console.error('Sign out error:', error)
+  }
+}
 
 onBeforeUnmount(() => {
   clearInterval(refreshInterval)
   clearInterval(weatherInterval)
+  clearInterval(enabledCheckInterval)
 })
 </script>
 
@@ -826,8 +870,18 @@ onBeforeUnmount(() => {
   </div>
   <div v-else class="container">
     <header class="header">
-      <h1><span class="title-klima">Klima</span><span class="title-dash">-</span><span class="title-kontrol">Kontrolloeren</span></h1>
-      <p class="header-sub">— Indoor Climate Monitor —</p>
+      <div class="header-center">
+        <h1><span class="title-klima">Klima</span><span class="title-dash">-</span><span class="title-kontrol">Kontrolloeren</span></h1>
+        <p class="header-sub">— Indoor Climate Monitor —</p>
+      </div>
+      <div class="header-right">
+        <div v-if="currentUser" class="user-info">
+          <div class="user-avatar">{{ currentUser.email?.charAt(0).toUpperCase() || '?' }}</div>
+          <div class="user-details">
+            <p class="user-email">{{ currentUser.email }}</p>
+          </div>
+        </div>
+      </div>
     </header>
 
     <!-- Indoor main display (template body adapted from legacy HTML) -->
@@ -1104,11 +1158,123 @@ onBeforeUnmount(() => {
 /* Component-level tweaks can go here; main styles loaded globally. */
 /* Moved into assets/styles.css*/
 
+.weather-emoji {
+  font-size: 2rem;
+  line-height: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
 .auth-loading-container {
   min-height: 100vh;
   display: grid;
   place-items: center;
   color: #e1eef8;
   font-size: 1.2rem;
+}
+
+/* Header layout */
+header.header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.header-center {
+  text-align: center;
+}
+
+.header-right {
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sign-out-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  color: #f44336;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.sign-out-btn:hover {
+  background: rgba(244, 67, 54, 0.25);
+  border-color: rgba(244, 67, 54, 0.6);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(100, 200, 255, 0.05));
+  border: 1px solid rgba(88, 166, 255, 0.2);
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #58a6ff, #64c8ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #0d1117;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.user-details {
+  min-width: 0;
+}
+
+.user-email {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #58a6ff;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Responsive weather layout fixes */
+.weather-top-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.weather-main-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.weather-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.outdoor-temp {
+  font-size: clamp(1.5rem, 5vw, 3rem);
+  font-weight: bold;
+}
+
+.search-card {
+  flex-shrink: 0;
+  width: clamp(150px, 30%, 250px);
 }
 </style>
