@@ -24,17 +24,59 @@ public class SensorService : ISensorService
 
         return await _db.GetReadingsAsync(limit);
     }
+
+    public async Task<List<SensorReading>> GetReadingsAsync(int limit, string uid)
+    {
+        if (limit <= 0)
+            throw new ArgumentException("Limit must be greater than 0.", nameof(limit));
+        
+        if (string.IsNullOrWhiteSpace(uid))
+            throw new ArgumentException("UID cannot be empty.", nameof(uid));
+
+        return await _db.GetReadingsAsync(limit, uid);
+    }
+
     public async Task<List<SensorReading>> GetDaylyReadingsAsync()
     {
         return await _db.GetDaylyReadingsAsync();
+    }
+
+    public async Task<List<SensorReading>> GetDaylyReadingsAsync(string uid)
+    {
+        if (string.IsNullOrWhiteSpace(uid))
+            throw new ArgumentException("UID cannot be empty.", nameof(uid));
+
+        return await _db.GetDaylyReadingsAsync(uid);
     }
 
     public async Task<List<SensorReading>> GetWeeklyReadingsAsync()
     {
         return await _db.GetWeeklyReadingsAsync();
     }
+
+    public async Task<List<SensorReading>> GetWeeklyReadingsAsync(string uid)
+    {
+        if (string.IsNullOrWhiteSpace(uid))
+            throw new ArgumentException("UID cannot be empty.", nameof(uid));
+
+        return await _db.GetWeeklyReadingsAsync(uid);
+    }
+
     public async Task<List<SensorReading>> GetMonthlyReadingsAsync()
     {
         return await _db.GetMonthlyReadingsAsync();
+    }
+
+    public async Task<List<SensorReading>> GetMonthlyReadingsAsync(string uid)
+    {
+        if (string.IsNullOrWhiteSpace(uid))
+            throw new ArgumentException("UID cannot be empty.", nameof(uid));
+
+        return await _db.GetMonthlyReadingsAsync(uid);
+    }
+
+    public async Task<List<KlimaDataUser>> GetUserSensorsAsync(string uid)
+    {
+        return await _db.GetKlimaDataUserAsync(uid);
     }
 }
