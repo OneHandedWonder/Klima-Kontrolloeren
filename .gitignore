@@ -53,3 +53,4 @@ __screenshots__/
 **/bin/
 **/obj/
 **/publish/
+Klima-Kontrolloeren-Frontend/.env.production

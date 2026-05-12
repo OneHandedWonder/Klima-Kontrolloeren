@@ -1,39 +1,16 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 
-const requiredEnvKeys = [
-  'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
-  'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET',
-  'VITE_FIREBASE_MESSAGING_SENDER_ID',
-  'VITE_FIREBASE_APP_ID'
-]
-
-const missingKeys = requiredEnvKeys.filter((key) => !import.meta.env[key])
-
-let firebaseApp = null
-let firebaseAuth = null
-
-if (missingKeys.length > 0) {
-  // Do not throw here — make firebase optional so the migrated dashboard can run
-  // without Firebase configuration during local development.
-  // eslint-disable-next-line no-console
-  console.warn(
-    `Firebase env vars missing: ${missingKeys.join(', ')} — skipping Firebase initialization.`
-  )
-} else {
-  const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID
-  }
-
-  firebaseApp = initializeApp(firebaseConfig)
-  firebaseAuth = getAuth(firebaseApp)
+const firebaseConfig = {
+  apiKey: 'AIzaSyD8UKI2QndJsNJsl_dx1YyykuN5ZYxDpJo',
+  authDomain: 'testprojectmichael-aeac9.firebaseapp.com',
+  projectId: 'testprojectmichael-aeac9',
+  storageBucket: 'testprojectmichael-aeac9.firebasestorage.app',
+  messagingSenderId: '111678406050',
+  appId: '1:111678406050:web:b9d747504885d65c7586fb'
 }
+
+const firebaseApp = initializeApp(firebaseConfig)
+const firebaseAuth = getAuth(firebaseApp)
 
 export { firebaseApp, firebaseAuth }
