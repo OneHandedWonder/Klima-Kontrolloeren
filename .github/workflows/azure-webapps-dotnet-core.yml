@@ -8,7 +8,10 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -17,24 +20,29 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Klima-Kontrolloeren-Frontend/package-lock.json
 
       - name: Install dependencies
-        working-directory: frontend
+        working-directory: Klima-Kontrolloeren-Frontend
         run: npm ci
 
       - name: Build Vue app
-        working-directory: frontend
+        working-directory: Klima-Kontrolloeren-Frontend
         run: npm run build
+
+      - name: Verify build output
+        run: dir Klima-Kontrolloeren-Frontend\dist
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: vue-app
-          path: frontend/dist
+          path: Klima-Kontrolloeren-Frontend/dist
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     needs: build-and-deploy
 
     permissions:
@@ -48,7 +56,7 @@ jobs:
           name: vue-app
           path: dist
 
-      - name: Login to Azure
+      - name: Azure Login
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
