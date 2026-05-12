@@ -1,7 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { firebaseAuth } from '../firebase'
+
+const router = useRouter()
 
 // User authentication state
 const currentUser = ref(null)
@@ -36,9 +39,29 @@ async function initializeUser() {
       { params: { uid: userUID.value } }
     )
     
-    // Store user sensors
+    // Check if user is enabled from sensor response
     if (Array.isArray(sensorResponse.data) && sensorResponse.data.length > 0) {
-      userSensors.value = sensorResponse.data[0].sensors || []
+      const userData = sensorResponse.data[0]
+      console.log('User data from sensor endpoint:', userData)
+      console.log('enabled field:', userData.enabled)
+      
+      if (userData.enabled === false) {
+        console.warn('User is disabled in the backend:', userUID.value)
+        // Sign out and redirect to sign-in page
+        if (firebaseAuth) {
+          try {
+            await firebaseAuth.signOut()
+            console.log('User signed out successfully')
+          } catch (error) {
+            console.error('Failed to sign out:', error)
+          }
+        }
+        // Redirect to sign-in page
+        router.push('/signin')
+        return
+      }
+      
+      userSensors.value = userData.sensors || []
       console.log('User sensors loaded:', userSensors.value)
     }
   } catch (error) {
