@@ -29,22 +29,6 @@ jobs:
         working-directory: ./Klima-Kontrolloeren-Frontend
         run: rm -rf dist
 
-<<<<<<< HEAD
-      - name: Create .env.production from secrets
-        working-directory: ./Klima-Kontrolloeren-Frontend
-        run: |
-          cat > .env.production << EOF
-          VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
-          EOF
-
-      - name: Build Vue app
-        working-directory: ./Klima-Kontrolloeren-Frontend
-=======
       - name: Build Vue app
         working-directory: ./Klima-Kontrolloeren-Frontend
         env:
@@ -54,7 +38,6 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
->>>>>>> dfdf62d (refactor: simplify Firebase initialization and update build step for Vue app)
         run: npm run build
 
       - name: Upload build artifact
