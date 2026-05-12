@@ -25,7 +25,11 @@ jobs:
         working-directory: ./Klima-Kontrolloeren-Frontend
         run: npm ci
 
-      - name: Build Vue app (with Firebase env)
+      - name: Clean previous build
+        working-directory: ./Klima-Kontrolloeren-Frontend
+        run: rm -rf dist
+
+      - name: Build Vue app (inject Firebase env)
         working-directory: ./Klima-Kontrolloeren-Frontend
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
