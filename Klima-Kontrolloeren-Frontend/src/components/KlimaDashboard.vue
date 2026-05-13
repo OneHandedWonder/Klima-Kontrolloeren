@@ -12,6 +12,67 @@ const userUID = ref(null)
 const userSensors = ref([])
 const authInitialized = ref(false)
 
+// Comfort temperature settings
+const comfortSettings = ref({
+  min: 18,
+  max: 24,
+  warning: 3
+})
+const settingsModalOpen = ref(false)
+const settingsFormData = ref({
+  min: 18,
+  max: 24
+})
+const COMFORT_TEMP_KEY = 'klima:comfortTemp'
+
+function loadComfortTemp() {
+  try {
+    const saved = localStorage.getItem(COMFORT_TEMP_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      comfortSettings.value = { ...comfortSettings.value, ...parsed }
+      settingsFormData.value = { min: parsed.min, max: parsed.max }
+    }
+  } catch (e) {
+    console.error('Failed to load comfort temperature settings:', e)
+  }
+}
+
+function saveComfortTemp() {
+  try {
+    const toSave = {
+      min: settingsFormData.value.min,
+      max: settingsFormData.value.max,
+      warning: 3
+    }
+    if (toSave.min < toSave.max) {
+      comfortSettings.value = toSave
+      localStorage.setItem(COMFORT_TEMP_KEY, JSON.stringify(toSave))
+    }
+  } catch (e) {
+    console.error('Failed to save comfort temperature settings:', e)
+  }
+}
+
+function resetComfortTemp() {
+  comfortSettings.value = { min: 18, max: 24, warning: 3 }
+  settingsFormData.value = { min: 18, max: 24 }
+  try {
+    localStorage.removeItem(COMFORT_TEMP_KEY)
+  } catch (e) {
+    console.error('Failed to reset comfort temperature settings:', e)
+  }
+}
+
+function openSettingsModal() {
+  settingsFormData.value = { min: comfortSettings.value.min, max: comfortSettings.value.max }
+  settingsModalOpen.value = true
+}
+
+function closeSettingsModal() {
+  settingsModalOpen.value = false
+}
+
 // Initialize user data from Firebase
 async function initializeUser() {
   if (!firebaseAuth || !firebaseAuth.currentUser) {
@@ -327,8 +388,9 @@ function mapAverageSeries(rows, period, metricKey) {
 const tempStatus = computed(() => {
   if (temperature.value === null) return 'no-data'
   const t = temperature.value
-  if (t >= 18 && t <= 24) return 'good'
-  if ((t >= 15 && t < 18) || (t > 24 && t <= 27)) return 'warning'
+  const { min, max, warning } = comfortSettings.value
+  if (t >= min && t <= max) return 'good'
+  if ((t >= min - warning && t < min) || (t > max && t <= max + warning)) return 'warning'
   return 'bad'
 })
 
@@ -349,7 +411,11 @@ const co2Status = computed(() => {
 
 const tempIndicatorPos = computed(() => {
   if (temperature.value === null) return -1
-  return Math.min(100, Math.max(0, ((temperature.value - 10) / 25) * 100))
+  const { min, max } = comfortSettings.value
+  const rangeMin = min - 5
+  const rangeMax = max + 10
+  const range = rangeMax - rangeMin
+  return Math.min(100, Math.max(0, ((temperature.value - rangeMin) / range) * 100))
 })
 
 const humidityIndicatorPos = computed(() => {
@@ -380,17 +446,21 @@ const climateAction = computed(() => {
     return 'Waiting for sensor data...'
   }
 
+  const { max, min, warning } = comfortSettings.value
+  const tempAlarmHigh = max + warning
+  const tempAlarmLow = min - warning
+
   // CO2 priority
   if (co2.value > 1200) {
     return '⚠️ Air quality is poor — opening ventilation / recommending window ventilation.'
   }
 
   // Temperature handling
-  if (temperature.value > 27) {
+  if (temperature.value > tempAlarmHigh) {
     return '🌡️ Room is too warm — activating cooling or increasing airflow.'
   }
 
-  if (temperature.value < 15) {
+  if (temperature.value < tempAlarmLow) {
     return '🥶 Room is too cold — activating heating.'
   }
 
@@ -490,25 +560,26 @@ function statusText(status) {
 // Helper function to determine status for any value and metric type
 function getStatusForValue(metric, value) {
   if (value === null || value === undefined || typeof value !== 'number' || Number.isNaN(value)) return 'no-data'
-  
+
   if (metric === 'temperature') {
-    if (value >= 18 && value <= 24) return 'good'
-    if ((value >= 15 && value < 18) || (value > 24 && value <= 27)) return 'warning'
+    const { min, max, warning } = comfortSettings.value
+    if (value >= min && value <= max) return 'good'
+    if ((value >= min - warning && value < min) || (value > max && value <= max + warning)) return 'warning'
     return 'bad'
   }
-  
+
   if (metric === 'humidity') {
     if (value >= 40 && value <= 60) return 'good'
     if ((value >= 30 && value < 40) || (value > 60 && value <= 70)) return 'warning'
     return 'bad'
   }
-  
+
   if (metric === 'co2') {
     if (value < 800) return 'good'
     if (value <= 1200) return 'warning'
     return 'bad'
   }
-  
+
   return 'no-data'
 }
 
@@ -519,6 +590,29 @@ const statusColors = {
   bad: '#f44336',
   'no-data': 'rgba(255,255,255,0.18)'
 }
+
+// Dynamic temperature scale bar gradient
+const tempScaleGradient = computed(() => {
+  const { min, max, warning } = comfortSettings.value
+  const rangeMin = min - 5
+  const rangeMax = max + 10
+  const range = rangeMax - rangeMin
+
+  // Calculate percentage positions for each threshold
+  const p_bad_min = 0
+  const p_warn_min = ((min - warning - rangeMin) / range) * 100
+  const p_good_min = ((min - rangeMin) / range) * 100
+  const p_good_max = ((max - rangeMin) / range) * 100
+  const p_warn_max = ((max + warning - rangeMin) / range) * 100
+  const p_bad_max = 100
+
+  return `linear-gradient(to right, #f44336 ${p_bad_min}%, #f44336 ${p_warn_min}%, #FF9800 ${p_warn_min}%, #FF9800 ${p_good_min}%, #4CAF50 ${p_good_min}%, #4CAF50 ${p_good_max}%, #FF9800 ${p_good_max}%, #FF9800 ${p_warn_max}%, #f44336 ${p_warn_max}%, #f44336 ${p_bad_max}%)`
+})
+
+const tempScaleRangeLabel = computed(() => {
+  const { min, max } = comfortSettings.value
+  return `${min}–${max}°C`
+})
 
 const pastGraphData = computed(() => pastWeatherReadings.value[activePastMetric.value][activeWeatherGraphPeriod.value] || [])
 const pastGraphUnit = computed(() => {
@@ -837,6 +931,7 @@ function fetchAll() {
 
 onMounted(() => {
   loadFavorites()
+  loadComfortTemp()
   // Initialize user and sensors first, then fetch data
   initializeUser().then(() => {
     fetchAll()
@@ -901,20 +996,21 @@ onBeforeUnmount(() => {
               <div class="info-tooltip">
                 <strong>Temperature</strong>
                 <p>Indoor air temperature measured by the Pi sensor.</p>
-                <div class="tooltip-range good">● Good — 18–24°C: Comfortable room temperature</div>
-                <div class="tooltip-range warning">● Warning — 15–18°C or 24–27°C: Slightly cold or warm</div>
-                <div class="tooltip-range bad">● Poor — below 15°C or above 27°C: Too cold or too hot</div>
+                <div class="tooltip-range good">● Good — {{ comfortSettings.min }}–{{ comfortSettings.max }}°C: Comfortable room temperature</div>
+                <div class="tooltip-range warning">● Warning — {{ comfortSettings.min - comfortSettings.warning }}–{{ comfortSettings.min }}°C or {{ comfortSettings.max }}–{{ comfortSettings.max + comfortSettings.warning }}°C: Slightly cold or warm</div>
+                <div class="tooltip-range bad">● Poor — below {{ comfortSettings.min - comfortSettings.warning }}°C or above {{ comfortSettings.max + comfortSettings.warning }}°C: Too cold or too hot</div>
               </div>
             </span>
           </div>
           <span :class="['metric-value', tempStatus]">{{ temperature !== null ? temperature : '—' }}<span class="metric-unit">°C</span></span>
           <div class="status-scale">
-            <div class="scale-bar" style="background: linear-gradient(to right, #f44336 0%, #f44336 20%, #FF9800 20%, #FF9800 32%, #4CAF50 32%, #4CAF50 56%, #FF9800 56%, #FF9800 68%, #f44336 68%, #f44336 100%);">
+            <div class="scale-bar" :style="{ background: tempScaleGradient }">
               <span v-if="tempIndicatorPos >= 0" class="scale-indicator" :style="{ left: tempIndicatorPos + '%' }"></span>
             </div>
-            <div class="scale-range-labels"><span>10°C</span><span>18–24°C</span><span>35°C</span></div>
+            <div class="scale-range-labels"><span>{{ comfortSettings.min - 5 }}°C</span><span>{{ tempScaleRangeLabel }}</span><span>{{ comfortSettings.max + 10 }}°C</span></div>
             <span v-if="tempStatus !== 'no-data'" :class="['status-badge', tempStatus]">{{ statusText(tempStatus) }}</span>
           </div>
+          <button class="settings-btn" @click="openSettingsModal" title="Adjust temperature preferences">⚙️ Adjust Preferences</button>
         </div>
 
         <!-- Humidity tile -->
@@ -1148,6 +1244,61 @@ onBeforeUnmount(() => {
     <footer class="footer">
       <p>Klima-Kontrolloeren · Indoor Climate Monitor · Zealand 3. Semester Systemudvikling</p>
     </footer>
+
+    <!-- Settings Modal -->
+    <div v-if="settingsModalOpen" class="settings-modal-overlay" @click="closeSettingsModal">
+      <div class="settings-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Temperature Preferences</h2>
+          <button class="modal-close-btn" @click="closeSettingsModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">Set your comfortable temperature range. The visual indicators will update to match your preferences.</p>
+
+          <div class="form-group">
+            <label for="min-temp">Minimum Comfortable Temperature (°C)</label>
+            <input
+              id="min-temp"
+              v-model.number="settingsFormData.min"
+              type="number"
+              min="5"
+              max="35"
+              step="0.5"
+              class="form-input"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="max-temp">Maximum Comfortable Temperature (°C)</label>
+            <input
+              id="max-temp"
+              v-model.number="settingsFormData.max"
+              type="number"
+              min="5"
+              max="35"
+              step="0.5"
+              class="form-input"
+            />
+          </div>
+
+          <div class="settings-preview">
+            <p class="preview-label">Preview:</p>
+            <div class="preview-info">
+              <span class="preview-range">Good: {{ settingsFormData.min }}–{{ settingsFormData.max }}°C</span>
+              <span class="preview-warning">Warning: {{ settingsFormData.min - 3 }}–{{ settingsFormData.min }}°C or {{ settingsFormData.max }}–{{ settingsFormData.max + 3 }}°C</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="resetComfortTemp">Reset to Defaults</button>
+          <div class="button-group">
+            <button class="btn-cancel" @click="closeSettingsModal">Cancel</button>
+            <button class="btn-primary" @click="saveComfortTemp(); closeSettingsModal()">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1276,5 +1427,256 @@ header.header {
 .search-card {
   flex-shrink: 0;
   width: clamp(150px, 30%, 250px);
+}
+
+/* Settings button and modal styles */
+.settings-btn {
+  display: block;
+  margin-top: 1rem;
+  padding: 0.6rem 1rem;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0.1));
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  color: #58a6ff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: center;
+}
+
+.settings-btn:hover {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.3), rgba(88, 166, 255, 0.2));
+  border-color: #58a6ff;
+}
+
+.settings-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.settings-modal {
+  background: linear-gradient(135deg, #0d1e30 0%, #1a2a3a 100%);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 450px;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(88, 166, 255, 0.2);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #8b949e;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #c9d1d9;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-description {
+  margin: 0 0 1.5rem;
+  color: #8b949e;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #c9d1d9;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(13, 30, 48, 0.6);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 6px;
+  color: #58a6ff;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+  background: rgba(13, 30, 48, 0.8);
+}
+
+.form-input:hover {
+  border-color: #58a6ff;
+}
+
+.settings-preview {
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.preview-label {
+  margin: 0 0 0.75rem;
+  color: #8b949e;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.preview-range {
+  color: #4CAF50;
+  font-weight: 500;
+}
+
+.preview-warning {
+  color: #FF9800;
+  font-weight: 500;
+}
+
+.modal-footer {
+  padding: 1.5rem;
+  border-top: 1px solid rgba(88, 166, 255, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.button-group {
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-cancel {
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #58a6ff, #79c0ff);
+  color: #0d1117;
+  border: 1px solid #58a6ff;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #79c0ff, #a8d8ff);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(88, 166, 255, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: #8b949e;
+  border: 1px solid rgba(139, 148, 158, 0.3);
+}
+
+.btn-secondary:hover {
+  background: rgba(139, 148, 158, 0.1);
+  border-color: rgba(139, 148, 158, 0.5);
+  color: #c9d1d9;
+}
+
+.btn-cancel {
+  background: transparent;
+  color: #8b949e;
+  border: 1px solid rgba(139, 148, 158, 0.3);
+}
+
+.btn-cancel:hover {
+  background: rgba(139, 148, 158, 0.1);
+  border-color: rgba(139, 148, 158, 0.5);
+  color: #c9d1d9;
 }
 </style>
