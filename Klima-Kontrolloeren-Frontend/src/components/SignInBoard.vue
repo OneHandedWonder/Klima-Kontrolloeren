@@ -3,7 +3,8 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
 	createUserWithEmailAndPassword,
-	signInWithEmailAndPassword
+	signInWithEmailAndPassword,
+	sendPasswordResetEmail
 } from 'firebase/auth'
 import { firebaseAuth } from '../firebase'
 
@@ -16,6 +17,7 @@ const successMessage = ref('')
 const router = useRouter()
 
 const isSignIn = computed(() => mode.value === 'signin')
+const isForgotPassword = computed(() => mode.value === 'forgot-password')
 const authUnavailable = computed(() => !firebaseAuth)
 
 function clearMessages() {
@@ -26,6 +28,31 @@ function clearMessages() {
 function switchMode(nextMode) {
 	mode.value = nextMode
 	clearMessages()
+}
+
+async function submitForgotPassword() {
+	clearMessages()
+
+	if (authUnavailable.value) {
+		errorMessage.value = 'Firebase authentication is not configured. Please set your VITE_FIREBASE_* environment variables.'
+		return
+	}
+
+	if (!email.value) {
+		errorMessage.value = 'Please enter your email address.'
+		return
+	}
+
+	loading.value = true
+	try {
+		await sendPasswordResetEmail(firebaseAuth, email.value.trim())
+		successMessage.value = 'Password reset email sent! Check your inbox for a link to reset your password.'
+		email.value = ''
+	} catch (error) {
+		errorMessage.value = mapFirebaseError(error)
+	} finally {
+		loading.value = false
+	}
 }
 
 async function submitForm() {
@@ -83,7 +110,7 @@ function mapFirebaseError(error) {
 				<p class="subtext">Use your Firebase account to access sensor data and controls.</p>
 			</div>
 
-			<div class="mode-toggle">
+			<div class="mode-toggle" v-if="!isForgotPassword">
 				<button
 					class="mode-button"
 					:class="{ active: isSignIn }"
@@ -102,7 +129,7 @@ function mapFirebaseError(error) {
 				</button>
 			</div>
 
-			<form class="signin-form" @submit.prevent="submitForm">
+			<form v-if="!isForgotPassword" class="signin-form" @submit.prevent="submitForm">
 				<label>
 					Email
 					<input
@@ -126,11 +153,51 @@ function mapFirebaseError(error) {
 					/>
 				</label>
 
+				<button
+					v-if="isSignIn"
+					type="button"
+					class="forgot-password-link"
+					@click="switchMode('forgot-password')"
+				>
+					Forgot password?
+				</button>
+
 				<p v-if="errorMessage" class="feedback error">{{ errorMessage }}</p>
 				<p v-if="successMessage" class="feedback success">{{ successMessage }}</p>
 
 				<button class="submit-button" type="submit" :disabled="loading || authUnavailable">
 					{{ loading ? 'Working...' : (isSignIn ? 'Sign in' : 'Create account') }}
+				</button>
+			</form>
+
+			<form v-else class="signin-form" @submit.prevent="submitForgotPassword">
+				<h2 class="form-title">Reset Your Password</h2>
+				<p class="form-description">Enter your email address and we'll send you a link to reset your password.</p>
+
+				<label>
+					Email
+					<input
+						v-model="email"
+						type="email"
+						autocomplete="email"
+						placeholder="name@example.com"
+						required
+					/>
+				</label>
+
+				<p v-if="errorMessage" class="feedback error">{{ errorMessage }}</p>
+				<p v-if="successMessage" class="feedback success">{{ successMessage }}</p>
+
+				<button class="submit-button" type="submit" :disabled="loading || authUnavailable">
+					{{ loading ? 'Sending...' : 'Send Reset Link' }}
+				</button>
+
+				<button
+					type="button"
+					class="back-button"
+					@click="switchMode('signin')"
+				>
+					← Back to Sign in
 				</button>
 			</form>
 		</section>
@@ -260,5 +327,53 @@ input:focus {
 .submit-button:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;
+}
+
+.forgot-password-link {
+	background: none;
+	border: none;
+	color: #7fd8ff;
+	font-size: 0.88rem;
+	cursor: pointer;
+	text-decoration: none;
+	padding: 0;
+	justify-self: end;
+	transition: color 0.2s;
+}
+
+.forgot-password-link:hover {
+	color: #a9d4f0;
+	text-decoration: underline;
+}
+
+.back-button {
+	background: rgba(255, 255, 255, 0.1);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	color: #a9d4f0;
+	border-radius: 8px;
+	padding: 10px 14px;
+	font-size: 0.88rem;
+	cursor: pointer;
+	transition: all 0.2s;
+	margin-top: 8px;
+}
+
+.back-button:hover {
+	background: rgba(255, 255, 255, 0.15);
+	color: #dbecf8;
+}
+
+.form-title {
+	font-size: 1.2rem;
+	color: #f2f8ff;
+	margin: 0 0 8px 0;
+	font-weight: 700;
+}
+
+.form-description {
+	color: #b8d8ec;
+	font-size: 0.9rem;
+	margin: 0 0 14px 0;
+	line-height: 1.4;
 }
 </style>
