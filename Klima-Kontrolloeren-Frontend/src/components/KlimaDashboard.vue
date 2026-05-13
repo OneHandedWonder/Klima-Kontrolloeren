@@ -736,6 +736,15 @@ const pastGraphYAxisTicks = computed(() => {
   return ticks
 })
 
+const pastZeroLineY = computed(() => {
+  const { min: axisMin, max: axisMax } = pastGraphAxisRange.value
+  const axisRange = axisMax - axisMin
+  if (axisRange === 0) return null
+  const zeroFrac = (0 - axisMin) / axisRange
+  if (zeroFrac <= 0 || zeroFrac >= 1) return null
+  return 8 + 100 * (1 - zeroFrac)
+})
+
 const pastGraphBars = computed(() => {
   const data = pastGraphData.value
   if (!data.length) return []
@@ -746,25 +755,38 @@ const pastGraphBars = computed(() => {
   const { min: axisMin, max: axisMax } = pastGraphAxisRange.value
   const slotW = chartW / data.length
   const barW = slotW * 0.55
-  
+
   const maxLabels = activeWeatherGraphPeriod.value === 'weekly' ? 10 : 12
   const step = Math.max(1, Math.ceil(data.length / maxLabels))
-  
+
+  const axisRange = axisMax - axisMin
+  const zeroFrac = axisRange > 0 ? Math.max(0, Math.min(1, (0 - axisMin) / axisRange)) : 0
+  const zeroY = topPad + chartH * (1 - zeroFrac)
+
   return data.map((d, i) => {
     const value = typeof d.value === 'number' ? d.value : null
-    const barH = (value !== null && axisMax > axisMin) ? ((value - axisMin) / (axisMax - axisMin)) * chartH : 0
+    let barH = 0
+    let y = zeroY
+
+    if (value !== null && axisRange > 0) {
+      const frac = (value - axisMin) / axisRange
+      const valueY = topPad + chartH * (1 - frac)
+      barH = Math.max(1, Math.abs(zeroY - valueY))
+      y = Math.min(zeroY, valueY)
+    }
+
     const showLabel = (i % step) === 0
     const rotate = data.length > maxLabels
 
     return {
       label: d.label,
       x: leftM + i * slotW + (slotW - barW) / 2,
-      y: topPad + chartH - barH,
+      y,
       barH,
       barWidth: barW,
       missing: d.missing,
       valueLabel: d.missing || value === null ? '—' : Number(value).toFixed(1),
-      valueLabelY: topPad + chartH - barH - 4,
+      valueLabelY: y - 4,
       showLabel,
       rotate,
       labelX: leftM + i * slotW + slotW / 2,
@@ -1240,6 +1262,7 @@ onBeforeUnmount(() => {
               </g>
               <text x="30" y="5" text-anchor="middle" fill="#5a7f99" font-size="7">{{ pastGraphUnit }}</text>
               <line x1="30" y1="8" x2="30" y2="118" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+              <line v-if="pastZeroLineY !== null" x1="30" :y1="pastZeroLineY" x2="292" :y2="pastZeroLineY" stroke="rgba(255,255,255,0.35)" stroke-width="1" stroke-dasharray="3,2"/>
               <g v-for="(bar, idx) in pastGraphBars" :key="bar.label">
                 <rect
                     :x="bar.x"
@@ -1268,7 +1291,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div class="dashboard-card">
+      <div class="dashboard-card graphs-card">
         <h3>Graphs</h3>
         <p class="subtitle">Historical graphs</p>
         <div class="graph-metric-btns">
