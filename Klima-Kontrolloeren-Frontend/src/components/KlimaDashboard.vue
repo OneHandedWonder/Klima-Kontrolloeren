@@ -18,12 +18,24 @@ const comfortSettings = ref({
   max: 24,
   warning: 3
 })
+
+// Comfort humidity settings
+const comfortHumiditySettings = ref({
+  min: 30,
+  max: 60,
+  warning: 10
+})
+
 const settingsModalOpen = ref(false)
+const humiditySettingsModalOpen = ref(false)
 const settingsFormData = ref({
-  min: 18,
-  max: 24
+  tempMin: 18,
+  tempMax: 24,
+  humidityMin: 30,
+  humidityMax: 60
 })
 const COMFORT_TEMP_KEY = 'klima:comfortTemp'
+const COMFORT_HUMIDITY_KEY = 'klima:comfortHumidity'
 
 function loadComfortTemp() {
   try {
@@ -31,18 +43,33 @@ function loadComfortTemp() {
     if (saved) {
       const parsed = JSON.parse(saved)
       comfortSettings.value = { ...comfortSettings.value, ...parsed }
-      settingsFormData.value = { min: parsed.min, max: parsed.max }
+      settingsFormData.value.tempMin = parsed.min
+      settingsFormData.value.tempMax = parsed.max
     }
   } catch (e) {
     console.error('Failed to load comfort temperature settings:', e)
   }
 }
 
+function loadComfortHumidity() {
+  try {
+    const saved = localStorage.getItem(COMFORT_HUMIDITY_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      comfortHumiditySettings.value = { ...comfortHumiditySettings.value, ...parsed }
+      settingsFormData.value.humidityMin = parsed.min
+      settingsFormData.value.humidityMax = parsed.max
+    }
+  } catch (e) {
+    console.error('Failed to load comfort humidity settings:', e)
+  }
+}
+
 function saveComfortTemp() {
   try {
     const toSave = {
-      min: settingsFormData.value.min,
-      max: settingsFormData.value.max,
+      min: settingsFormData.value.tempMin,
+      max: settingsFormData.value.tempMax,
       warning: 3
     }
     if (toSave.min < toSave.max) {
@@ -54,9 +81,26 @@ function saveComfortTemp() {
   }
 }
 
+function saveComfortHumidity() {
+  try {
+    const toSave = {
+      min: settingsFormData.value.humidityMin,
+      max: settingsFormData.value.humidityMax,
+      warning: 10
+    }
+    if (toSave.min < toSave.max) {
+      comfortHumiditySettings.value = toSave
+      localStorage.setItem(COMFORT_HUMIDITY_KEY, JSON.stringify(toSave))
+    }
+  } catch (e) {
+    console.error('Failed to save comfort humidity settings:', e)
+  }
+}
+
 function resetComfortTemp() {
   comfortSettings.value = { min: 18, max: 24, warning: 3 }
-  settingsFormData.value = { min: 18, max: 24 }
+  settingsFormData.value.tempMin = 18
+  settingsFormData.value.tempMax = 24
   try {
     localStorage.removeItem(COMFORT_TEMP_KEY)
   } catch (e) {
@@ -64,13 +108,39 @@ function resetComfortTemp() {
   }
 }
 
+function resetComfortHumidity() {
+  comfortHumiditySettings.value = { min: 30, max: 60, warning: 10 }
+  settingsFormData.value.humidityMin = 30
+  settingsFormData.value.humidityMax = 60
+  try {
+    localStorage.removeItem(COMFORT_HUMIDITY_KEY)
+  } catch (e) {
+    console.error('Failed to reset comfort humidity settings:', e)
+  }
+}
+
 function openSettingsModal() {
-  settingsFormData.value = { min: comfortSettings.value.min, max: comfortSettings.value.max }
+  settingsFormData.value = {
+    tempMin: comfortSettings.value.min,
+    tempMax: comfortSettings.value.max,
+    humidityMin: comfortHumiditySettings.value.min,
+    humidityMax: comfortHumiditySettings.value.max
+  }
   settingsModalOpen.value = true
 }
 
 function closeSettingsModal() {
   settingsModalOpen.value = false
+}
+
+function openHumiditySettingsModal() {
+  settingsFormData.value.humidityMin = comfortHumiditySettings.value.min
+  settingsFormData.value.humidityMax = comfortHumiditySettings.value.max
+  humiditySettingsModalOpen.value = true
+}
+
+function closeHumiditySettingsModal() {
+  humiditySettingsModalOpen.value = false
 }
 
 // Initialize user data from Firebase
@@ -397,8 +467,9 @@ const tempStatus = computed(() => {
 const humidityStatus = computed(() => {
   if (humidity.value === null) return 'no-data'
   const h = humidity.value
-  if (h >= 40 && h <= 60) return 'good'
-  if ((h >= 30 && h < 40) || (h > 60 && h <= 70)) return 'warning'
+  const { min, max, warning } = comfortHumiditySettings.value
+  if (h >= min && h <= max) return 'good'
+  if ((h >= min - warning && h < min) || (h > max && h <= max + warning)) return 'warning'
   return 'bad'
 })
 
@@ -569,8 +640,9 @@ function getStatusForValue(metric, value) {
   }
 
   if (metric === 'humidity') {
-    if (value >= 40 && value <= 60) return 'good'
-    if ((value >= 30 && value < 40) || (value > 60 && value <= 70)) return 'warning'
+    const { min, max, warning } = comfortHumiditySettings.value
+    if (value >= min && value <= max) return 'good'
+    if ((value >= min - warning && value < min) || (value > max && value <= max + warning)) return 'warning'
     return 'bad'
   }
 
@@ -604,6 +676,20 @@ const tempScaleGradient = computed(() => {
   const p_good_min = ((min - rangeMin) / range) * 100
   const p_good_max = ((max - rangeMin) / range) * 100
   const p_warn_max = ((max + warning - rangeMin) / range) * 100
+  const p_bad_max = 100
+
+  return `linear-gradient(to right, #f44336 ${p_bad_min}%, #f44336 ${p_warn_min}%, #FF9800 ${p_warn_min}%, #FF9800 ${p_good_min}%, #4CAF50 ${p_good_min}%, #4CAF50 ${p_good_max}%, #FF9800 ${p_good_max}%, #FF9800 ${p_warn_max}%, #f44336 ${p_warn_max}%, #f44336 ${p_bad_max}%)`
+})
+
+const humidityScaleGradient = computed(() => {
+  const { min, max, warning } = comfortHumiditySettings.value
+
+  // Calculate percentage positions for each threshold (0-100% scale)
+  const p_bad_min = 0
+  const p_warn_min = Math.max(0, min - warning)
+  const p_good_min = min
+  const p_good_max = max
+  const p_warn_max = Math.min(100, max + warning)
   const p_bad_max = 100
 
   return `linear-gradient(to right, #f44336 ${p_bad_min}%, #f44336 ${p_warn_min}%, #FF9800 ${p_warn_min}%, #FF9800 ${p_good_min}%, #4CAF50 ${p_good_min}%, #4CAF50 ${p_good_max}%, #FF9800 ${p_good_max}%, #FF9800 ${p_warn_max}%, #f44336 ${p_warn_max}%, #f44336 ${p_bad_max}%)`
@@ -932,6 +1018,7 @@ function fetchAll() {
 onMounted(() => {
   loadFavorites()
   loadComfortTemp()
+  loadComfortHumidity()
   // Initialize user and sensors first, then fetch data
   initializeUser().then(() => {
     fetchAll()
@@ -1030,12 +1117,13 @@ onBeforeUnmount(() => {
           </div>
           <span :class="['metric-value', humidityStatus]">{{ humidity !== null ? humidity : '—' }}<span class="metric-unit">%</span></span>
           <div class="status-scale">
-            <div class="scale-bar" style="background: linear-gradient(to right, #f44336 0%, #f44336 30%, #FF9800 30%, #FF9800 40%, #4CAF50 40%, #4CAF50 60%, #FF9800 60%, #FF9800 70%, #f44336 70%, #f44336 100%);">
+            <div class="scale-bar" :style="{ background: humidityScaleGradient }">
               <span v-if="humidityIndicatorPos >= 0" class="scale-indicator" :style="{ left: humidityIndicatorPos + '%' }"></span>
             </div>
-            <div class="scale-range-labels"><span>0%</span><span>40–60%</span><span>100%</span></div>
+            <div class="scale-range-labels"><span>0%</span><span>{{ comfortHumiditySettings.min }}–{{ comfortHumiditySettings.max }}%</span><span>100%</span></div>
             <span v-if="humidityStatus !== 'no-data'" :class="['status-badge', humidityStatus]">{{ statusText(humidityStatus) }}</span>
           </div>
+          <button class="settings-btn" @click="openHumiditySettingsModal" title="Adjust humidity preferences">⚙️ Adjust Preferences</button>
         </div>
 
         <!-- CO2 tile -->
@@ -1255,37 +1343,41 @@ onBeforeUnmount(() => {
         <div class="modal-body">
           <p class="modal-description">Set your comfortable temperature range. The visual indicators will update to match your preferences.</p>
 
-          <div class="form-group">
-            <label for="min-temp">Minimum Comfortable Temperature (°C)</label>
-            <input
-              id="min-temp"
-              v-model.number="settingsFormData.min"
-              type="number"
-              min="5"
-              max="35"
-              step="0.5"
-              class="form-input"
-            />
-          </div>
+          <!-- Temperature Section -->
+          <div class="settings-section">
+            <h3 class="section-title">Temperature (°C)</h3>
+            <div class="form-group">
+              <label for="min-temp">Minimum Comfortable Temperature</label>
+              <input
+                id="min-temp"
+                v-model.number="settingsFormData.tempMin"
+                type="number"
+                min="5"
+                max="35"
+                step="0.5"
+                class="form-input"
+              />
+            </div>
 
-          <div class="form-group">
-            <label for="max-temp">Maximum Comfortable Temperature (°C)</label>
-            <input
-              id="max-temp"
-              v-model.number="settingsFormData.max"
-              type="number"
-              min="5"
-              max="35"
-              step="0.5"
-              class="form-input"
-            />
-          </div>
+            <div class="form-group">
+              <label for="max-temp">Maximum Comfortable Temperature</label>
+              <input
+                id="max-temp"
+                v-model.number="settingsFormData.tempMax"
+                type="number"
+                min="5"
+                max="35"
+                step="0.5"
+                class="form-input"
+              />
+            </div>
 
-          <div class="settings-preview">
-            <p class="preview-label">Preview:</p>
-            <div class="preview-info">
-              <span class="preview-range">Good: {{ settingsFormData.min }}–{{ settingsFormData.max }}°C</span>
-              <span class="preview-warning">Warning: {{ settingsFormData.min - 3 }}–{{ settingsFormData.min }}°C or {{ settingsFormData.max }}–{{ settingsFormData.max + 3 }}°C</span>
+            <div class="settings-preview">
+              <p class="preview-label">Preview:</p>
+              <div class="preview-info">
+                <span class="preview-range">Good: {{ settingsFormData.tempMin }}–{{ settingsFormData.tempMax }}°C</span>
+                <span class="preview-warning">Warning: {{ settingsFormData.tempMin - 3 }}–{{ settingsFormData.tempMin }}°C or {{ settingsFormData.tempMax }}–{{ settingsFormData.tempMax + 3 }}°C</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1295,6 +1387,65 @@ onBeforeUnmount(() => {
           <div class="button-group">
             <button class="btn-cancel" @click="closeSettingsModal">Cancel</button>
             <button class="btn-primary" @click="saveComfortTemp(); closeSettingsModal()">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Humidity Settings Modal -->
+    <div v-if="humiditySettingsModalOpen" class="settings-modal-overlay" @click="closeHumiditySettingsModal">
+      <div class="settings-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Humidity Preferences</h2>
+          <button class="modal-close-btn" @click="closeHumiditySettingsModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">Set your comfortable humidity range. The visual indicators will update to match your preferences.</p>
+
+          <!-- Humidity Section -->
+          <div class="settings-section">
+            <h3 class="section-title">Humidity (%)</h3>
+            <div class="form-group">
+              <label for="min-humidity">Minimum Comfortable Humidity</label>
+              <input
+                id="min-humidity"
+                v-model.number="settingsFormData.humidityMin"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                class="form-input"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="max-humidity">Maximum Comfortable Humidity</label>
+              <input
+                id="max-humidity"
+                v-model.number="settingsFormData.humidityMax"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                class="form-input"
+              />
+            </div>
+
+            <div class="settings-preview">
+              <p class="preview-label">Preview:</p>
+              <div class="preview-info">
+                <span class="preview-range">Good: {{ settingsFormData.humidityMin }}–{{ settingsFormData.humidityMax }}%</span>
+                <span class="preview-warning">Warning: {{ settingsFormData.humidityMin - 10 }}–{{ settingsFormData.humidityMin }}% or {{ settingsFormData.humidityMax }}–{{ settingsFormData.humidityMax + 10 }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="resetComfortHumidity">Reset to Defaults</button>
+          <div class="button-group">
+            <button class="btn-cancel" @click="closeHumiditySettingsModal">Cancel</button>
+            <button class="btn-primary" @click="saveComfortHumidity(); closeHumiditySettingsModal()">Save Changes</button>
           </div>
         </div>
       </div>
@@ -1678,5 +1829,23 @@ header.header {
   background: rgba(139, 148, 158, 0.1);
   border-color: rgba(139, 148, 158, 0.5);
   color: #c9d1d9;
+}
+
+.settings-section {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(88, 166, 255, 0.1);
+}
+
+.settings-section:last-of-type {
+  border-bottom: none;
+}
+
+.section-title {
+  margin: 0 0 1.25rem;
+  font-size: 1.05rem;
+  color: #79c0ff;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 </style>
