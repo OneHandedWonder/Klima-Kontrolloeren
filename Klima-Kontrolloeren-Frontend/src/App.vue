@@ -66,11 +66,14 @@ body { margin: 0 }
 }
 
 .topbar button {
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: #7fa8bf;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: 8px;
   cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 400;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 </style>
