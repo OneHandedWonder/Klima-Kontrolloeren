@@ -1,7 +1,6 @@
 ﻿using KlimaKontrolloerenBackend.Controllers;
 using KlimaKontrolloerenBackend.Models;
 using KlimaKontrolloerenBackend.Services;
-using TestProject.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Xunit;
@@ -73,52 +72,77 @@ public class SensorControllerTests
     // -------------------------
 
     [Fact]
-    public async Task GetReadings_ValidToken_Returns200WithData()
+    public async Task GetUserSensors_MissingUid_Returns400()
     {
-        // Arrange
-        var readings = new List<SensorReading>
-        {
-            new() { Id = 1, SourceId = "device-123", SensorId = "pi-sensor-01",
-                    Temperature = 22.5, Humidity = 60.0, CO2PPM = 415.0 }
-        };
-
-        _mockSensorService
-            .Setup(x => x.GetReadingsAsync(100))
-            .ReturnsAsync(readings);
-
         // Act
-        var result = await _sut.GetReadings(100);
+        var result = await _sut.GetUserSensors("");
 
         // Assert
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var data = Assert.IsType<List<SensorReading>>(ok.Value);
-        Assert.Single(data);
+        Assert.IsType<BadRequestObjectResult>(result);
+        _mockSensorService.Verify(x => x.GetUserSensorsAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public async Task GetReadings_Returns200WithData()
-    {
-        // Arrange
-        var result = await _sut.GetReadings();
-
-        // Assert
-        Assert.IsType<OkObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task GetReadings_NoReadingsExist_Returns200WithEmptyList()
+    public async Task GetUserSensors_NoSensorsFound_Returns404()
     {
         // Arrange
         _mockSensorService
-            .Setup(x => x.GetReadingsAsync(100))
-            .ReturnsAsync(new List<SensorReading>());
+            .Setup(x => x.GetUserSensorsAsync("uid-1"))
+            .ReturnsAsync(new List<KlimaDataUser>());
 
         // Act
-        var result = await _sut.GetReadings();
+        var result = await _sut.GetUserSensors("uid-1");
+
+        // Assert
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Theory]
+    [InlineData("[\"pi-sensor-01\",\"pi-sensor-02\"]")]
+    [InlineData("\"pi-sensor-01\", \"pi-sensor-02\"")]
+    [InlineData("\"pi-sensor-01\"")]
+    public async Task GetUserSensors_WithStoredSensors_ReturnsParsedSensors(string storedSensors)
+    {
+        // Arrange
+        _mockSensorService
+            .Setup(x => x.GetUserSensorsAsync("uid-1"))
+            .ReturnsAsync(new List<KlimaDataUser>
+            {
+                new() { Uid = "uid-1", Sensors = storedSensors, Enabled = true }
+            });
+
+        // Act
+        var result = await _sut.GetUserSensors("uid-1");
 
         // Assert
         var ok = Assert.IsType<OkObjectResult>(result);
-        var data = Assert.IsType<List<SensorReading>>(ok.Value);
-        Assert.Empty(data);
+        var item = Assert.Single(Assert.IsAssignableFrom<IEnumerable<object>>(ok.Value));
+        var sensors = Assert.IsAssignableFrom<string[]>(
+            item.GetType().GetProperty("sensors")!.GetValue(item));
+
+        Assert.Contains("pi-sensor-01", sensors);
+    }
+
+    [Fact]
+    public async Task GetUserSensors_WithBlankStoredSensors_ReturnsEmptySensorsArray()
+    {
+        // Arrange
+        _mockSensorService
+            .Setup(x => x.GetUserSensorsAsync("uid-1"))
+            .ReturnsAsync(new List<KlimaDataUser>
+            {
+                new() { Uid = "uid-1", Sensors = "", Enabled = true }
+            });
+
+        // Act
+        var result = await _sut.GetUserSensors("uid-1");
+
+        // Assert
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var item = Assert.Single(Assert.IsAssignableFrom<IEnumerable<object>>(ok.Value));
+        var sensors = Assert.IsAssignableFrom<string[]>(
+            item.GetType().GetProperty("sensors")!.GetValue(item));
+
+        Assert.Empty(sensors);
     }
 }

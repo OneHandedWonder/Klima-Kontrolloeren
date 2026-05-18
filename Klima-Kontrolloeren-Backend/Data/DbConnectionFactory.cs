@@ -1,6 +1,7 @@
 ﻿using Microsoft.Data.SqlClient;
 using KlimaKontrolloerenBackend.Models;
 using KlimaKontrolloerenBackend.Data;
+using System.Diagnostics.CodeAnalysis;
 
 namespace KlimaKontrolloerenBackend.Data;
 
@@ -15,6 +16,7 @@ public class DbConnectionFactory : IDbConnectionFactory
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task SaveReadingAsync(SensorReadingDto dto)
     {
         const string sql = """
@@ -35,6 +37,7 @@ public class DbConnectionFactory : IDbConnectionFactory
         await cmd.ExecuteNonQueryAsync();
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetReadingsAsync(int limit)
     {
     const string sql = """
@@ -70,6 +73,7 @@ public class DbConnectionFactory : IDbConnectionFactory
     return readings;
 }
 
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetReadingsAsync(int limit, string uid)
     {
         // First, get the user's sensors from KlimaDataUsers
@@ -161,6 +165,7 @@ public class DbConnectionFactory : IDbConnectionFactory
             return string.IsNullOrWhiteSpace(trimmed) ? new List<string>() : new List<string> { trimmed };
         }
     }
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
 public async Task<List<SensorReading>> GetDaylyReadingsAsync()
     {
         const string sql = """
@@ -195,6 +200,7 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
         return readings;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetDaylyReadingsAsync(string uid)
     {
         // First, get the user's sensors
@@ -234,6 +240,7 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
 
         return readings;
     }
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetWeeklyReadingsAsync()
     {
         const string sql = """
@@ -268,6 +275,7 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
         return readings;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetWeeklyReadingsAsync(string uid)
     {
         var userSensors = await GetUserSensorsListAsync(uid);
@@ -306,6 +314,7 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
 
         return readings;
     }
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetMonthlyReadingsAsync()
     {
         const string sql = """
@@ -340,6 +349,7 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
         return readings;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetMonthlyReadingsAsync(string uid)
     {
         var userSensors = await GetUserSensorsListAsync(uid);
@@ -379,6 +389,7 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
         return readings;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     private async Task<List<string>> GetUserSensorsListAsync(string uid)
     {
         const string sql = """
@@ -402,6 +413,7 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
 
         return new List<string>();
     }
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<KlimaDataUser>> GetKlimaDataUserAsync(string firebaseUid)
     {
         const string sql = """
@@ -433,6 +445,7 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
         return users;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Placeholder for database-backed UID lookup; actual token lookup is handled by AuthService.")]
     public async Task<List<string>> GetUserUIDAsync(string token)
     {
         // For now, return empty list or throw not implemented

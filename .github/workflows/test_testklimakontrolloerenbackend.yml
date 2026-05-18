@@ -1,12 +1,12 @@
-name: Backend CI/CD
+name: Test Backend CI/CD
 
 on:
   push:
     branches:
-      - main
+      - Test
   pull_request:
     branches:
-      - main
+      - Test
   workflow_dispatch:
 
 jobs:
@@ -82,7 +82,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-test-results
+          name: test-backend-test-results
           path: "xUnit Test/TestResults"
 
       - name: Publish backend
@@ -91,13 +91,13 @@ jobs:
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
-          name: .net-app
+          name: test-dotnet-app
           path: ./publish
 
   deploy:
     runs-on: ubuntu-latest
     needs: build-and-test
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/Test')
 
     permissions:
       id-token: write
@@ -107,19 +107,25 @@ jobs:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
-          name: .net-app
+          name: test-dotnet-app
+
+      - name: Verify backend deployment package
+        run: |
+          test -f Klima-Kontrolloeren-Backend.dll
+          test ! -f index.html
+          test ! -f server.js
 
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_FB88312E778F4D6AB5BE719886C08F7C }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EF2DDFF1D8FE44DB8CA5708A578E610B }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_CA39480C7F294866BF82355384D226C3 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_B88B7186813041C094D020181443A179 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4655ECFB0998440490EA947DA9141E86 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_32A79C6B8CB147599D8F485B8DA8559E }}
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'KlimaKontrolloeren-Backend'
+          app-name: 'TestKlimaKontrolloerenBackend'
           slot-name: 'Production'
           package: .

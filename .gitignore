@@ -35,6 +35,13 @@ coverage
 # Vitest
 __screenshots__/
 
+# Test coverage output
+CoverageReport/
+TestResults/
+TestResult/
+**/TestResults/
+**/TestResult/
+
 # Vite
 *.timestamp-*-*.mjs
 

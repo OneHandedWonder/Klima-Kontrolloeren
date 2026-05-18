@@ -91,4 +91,114 @@ public class SensorServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() =>
             _sut.GetReadingsAsync(invalidLimit));
     }
+
+    [Fact]
+    public async Task GetReadingsAsync_WithUid_ReturnsFilteredList()
+    {
+        var expected = new List<SensorReading>
+        {
+            new() { Id = 1, SourceId = "uid-1", SensorId = "pi-sensor-01" }
+        };
+
+        _mockDb.Setup(x => x.GetReadingsAsync(25, "uid-1")).ReturnsAsync(expected);
+
+        var result = await _sut.GetReadingsAsync(25, "uid-1");
+
+        Assert.Same(expected, result);
+    }
+
+    [Theory]
+    [InlineData(0, "uid-1")]
+    [InlineData(10, "")]
+    public async Task GetReadingsAsync_WithInvalidLimitOrUid_ThrowsArgumentException(int limit, string uid)
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.GetReadingsAsync(limit, uid));
+    }
+
+    [Fact]
+    public async Task GetDaylyReadingsAsync_ReturnsDatabaseResult()
+    {
+        var expected = new List<SensorReading> { new() { SensorId = "pi-sensor-01" } };
+        _mockDb.Setup(x => x.GetDaylyReadingsAsync()).ReturnsAsync(expected);
+
+        var result = await _sut.GetDaylyReadingsAsync();
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task GetDaylyReadingsAsync_WithUid_ReturnsDatabaseResult()
+    {
+        var expected = new List<SensorReading> { new() { SensorId = "pi-sensor-01" } };
+        _mockDb.Setup(x => x.GetDaylyReadingsAsync("uid-1")).ReturnsAsync(expected);
+
+        var result = await _sut.GetDaylyReadingsAsync("uid-1");
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task GetWeeklyReadingsAsync_ReturnsDatabaseResult()
+    {
+        var expected = new List<SensorReading> { new() { SensorId = "pi-sensor-01" } };
+        _mockDb.Setup(x => x.GetWeeklyReadingsAsync()).ReturnsAsync(expected);
+
+        var result = await _sut.GetWeeklyReadingsAsync();
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task GetWeeklyReadingsAsync_WithUid_ReturnsDatabaseResult()
+    {
+        var expected = new List<SensorReading> { new() { SensorId = "pi-sensor-01" } };
+        _mockDb.Setup(x => x.GetWeeklyReadingsAsync("uid-1")).ReturnsAsync(expected);
+
+        var result = await _sut.GetWeeklyReadingsAsync("uid-1");
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task GetMonthlyReadingsAsync_ReturnsDatabaseResult()
+    {
+        var expected = new List<SensorReading> { new() { SensorId = "pi-sensor-01" } };
+        _mockDb.Setup(x => x.GetMonthlyReadingsAsync()).ReturnsAsync(expected);
+
+        var result = await _sut.GetMonthlyReadingsAsync();
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task GetMonthlyReadingsAsync_WithUid_ReturnsDatabaseResult()
+    {
+        var expected = new List<SensorReading> { new() { SensorId = "pi-sensor-01" } };
+        _mockDb.Setup(x => x.GetMonthlyReadingsAsync("uid-1")).ReturnsAsync(expected);
+
+        var result = await _sut.GetMonthlyReadingsAsync("uid-1");
+
+        Assert.Same(expected, result);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task TimeRangeMethods_WithInvalidUid_ThrowArgumentException(string uid)
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.GetDaylyReadingsAsync(uid));
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.GetWeeklyReadingsAsync(uid));
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.GetMonthlyReadingsAsync(uid));
+    }
+
+    [Fact]
+    public async Task GetUserSensorsAsync_ReturnsDatabaseResult()
+    {
+        var expected = new List<KlimaDataUser> { new() { Uid = "uid-1", Enabled = true } };
+        _mockDb.Setup(x => x.GetKlimaDataUserAsync("uid-1")).ReturnsAsync(expected);
+
+        var result = await _sut.GetUserSensorsAsync("uid-1");
+
+        Assert.Same(expected, result);
+    }
 }
