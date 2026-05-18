@@ -74,7 +74,7 @@ jobs:
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Failed tests"
             $results.TestRun.Results.UnitTestResult | Where-Object { $_.outcome -eq "Failed" } | ForEach-Object {
-              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- `$($_.testName)`"
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- " + $_.testName)
             }
           }
 
