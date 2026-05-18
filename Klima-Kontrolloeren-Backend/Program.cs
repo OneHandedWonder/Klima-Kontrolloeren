@@ -27,3 +27,5 @@ app.UseCors();
 app.MapGet("/", () => Results.Ok("Klima-Kontrolloeren backend is running."));
 app.MapControllers();
 app.Run();
+
+public partial class Program { }
