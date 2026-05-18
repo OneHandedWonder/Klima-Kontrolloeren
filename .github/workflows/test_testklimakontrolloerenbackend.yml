@@ -76,6 +76,12 @@ jobs:
         with:
           name: test-dotnet-app
 
+      - name: Verify backend deployment package
+        run: |
+          test -f Klima-Kontrolloeren-Backend.dll
+          test ! -f index.html
+          test ! -f server.js
+
       - name: Login to Azure
         uses: azure/login@v2
         with:

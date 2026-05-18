@@ -43,11 +43,76 @@ jobs:
         working-directory: ./Klima-Kontrolloeren-Frontend
         run: npm run build
 
+      - name: Prepare Azure App Service package
+        run: |
+          rm -rf frontend-deploy
+          mkdir frontend-deploy
+          cp -R Klima-Kontrolloeren-Frontend/dist/. frontend-deploy/
+          cat > frontend-deploy/package.json <<'JSON'
+          {
+            "name": "test-klimakontrolloerenfrontend",
+            "version": "1.0.0",
+            "private": true,
+            "scripts": {
+              "start": "node server.js"
+            },
+            "engines": {
+              "node": "20.x"
+            }
+          }
+          JSON
+          cat > frontend-deploy/server.js <<'JS'
+          const http = require('http');
+          const fs = require('fs');
+          const path = require('path');
+
+          const root = __dirname;
+          const port = process.env.PORT || 8080;
+          const types = {
+            '.css': 'text/css',
+            '.html': 'text/html',
+            '.ico': 'image/x-icon',
+            '.js': 'text/javascript',
+            '.json': 'application/json',
+            '.png': 'image/png',
+            '.svg': 'image/svg+xml',
+            '.txt': 'text/plain',
+            '.woff': 'font/woff',
+            '.woff2': 'font/woff2'
+          };
+
+          http.createServer((request, response) => {
+            const requestPath = decodeURIComponent(new URL(request.url, `http://${request.headers.host}`).pathname);
+            const safePath = path.normalize(requestPath).replace(/^(\.\.[/\\])+/, '');
+            let filePath = path.join(root, safePath);
+
+            if (requestPath.endsWith('/')) {
+              filePath = path.join(filePath, 'index.html');
+            }
+
+            fs.stat(filePath, (statError, stat) => {
+              if (statError || !stat.isFile()) {
+                filePath = path.join(root, 'index.html');
+              }
+
+              const stream = fs.createReadStream(filePath);
+              stream.on('error', () => {
+                response.writeHead(500);
+                response.end('Unable to serve file.');
+              });
+              response.writeHead(200, {
+                'Content-Type': types[path.extname(filePath)] || 'application/octet-stream'
+              });
+              stream.pipe(response);
+            });
+          }).listen(port);
+          JS
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: test-vue-app
-          path: Klima-Kontrolloeren-Frontend/dist
+          path: frontend-deploy
 
   deploy:
     runs-on: ubuntu-latest
@@ -63,7 +128,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: test-vue-app
-          path: dist
+          path: frontend-deploy
+
+      - name: Verify frontend deployment package
+        run: |
+          test -f frontend-deploy/index.html
+          test -f frontend-deploy/server.js
+          test -f frontend-deploy/package.json
+          test -d frontend-deploy/assets
+          test ! -f frontend-deploy/Klima-Kontrolloeren-Backend.dll
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -78,4 +151,4 @@ jobs:
         with:
           app-name: 'TestKlimaKontrolloerenFrontend'
           slot-name: 'Production'
-          package: dist
+          package: frontend-deploy
