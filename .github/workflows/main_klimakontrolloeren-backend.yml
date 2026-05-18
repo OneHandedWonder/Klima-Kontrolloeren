@@ -45,6 +45,39 @@ jobs:
       - name: Run tests with coverage
         run: dotnet test Klima-Kontrolloeren-Backend.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
 
+      - name: Add test summary
+        if: always()
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Path "xUnit Test/TestResults" -Filter "*.trx" -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $trx) {
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Backend test results"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "No TRX test result file was found."
+            exit 0
+          }
+
+          [xml]$results = Get-Content $trx.FullName
+          $counters = $results.TestRun.ResultSummary.Counters
+          $total = [int]$counters.total
+          $passed = [int]$counters.passed
+          $failed = [int]$counters.failed
+          $skipped = [int]$counters.notExecuted
+
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Backend test results"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Total | Passed | Failed | Skipped |"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| ---: | ---: | ---: | ---: |"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| $total | $passed | $failed | $skipped |"
+
+          if ($failed -gt 0) {
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Failed tests"
+            $results.TestRun.Results.UnitTestResult | Where-Object { $_.outcome -eq "Failed" } | ForEach-Object {
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- `$($_.testName)`"
+            }
+          }
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
