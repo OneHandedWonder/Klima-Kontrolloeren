@@ -4,9 +4,17 @@ on:
   push:
     branches:
       - Test
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
     branches:
       - Test
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 jobs:
