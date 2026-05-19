@@ -151,6 +151,14 @@ async function initializeUser() {
   }
 
   currentUser.value = firebaseAuth.currentUser
+  const cachedUser = readCache(`user:${firebaseAuth.currentUser.uid}`, CACHE_TTL.user)
+
+  if (cachedUser) {
+    userUID.value = cachedUser.uid
+    userSensors.value = cachedUser.sensors || []
+    authInitialized.value = true
+    return
+  }
   
   try {
     // Get ID token from Firebase user
@@ -193,6 +201,10 @@ async function initializeUser() {
       }
       
       userSensors.value = userData.sensors || []
+      writeCache(`user:${firebaseAuth.currentUser.uid}`, {
+        uid: userUID.value,
+        sensors: userSensors.value
+      })
       console.log('User sensors loaded:', userSensors.value)
     }
   } catch (error) {
@@ -258,7 +270,7 @@ function selectCity(s) {
   citySuggestions.value = []
   cityQuery.value = ''
   // Refresh weather for the new location
-  fetchWeather()
+  fetchWeather(true)
 }
 
 // Favorites handling (stored in localStorage)
@@ -305,7 +317,7 @@ function selectFavorite(fav) {
   selectedCity.value = fav.name
   weatherLat.value = fav.lat
   weatherLon.value = fav.lon
-  fetchWeather()
+  fetchWeather(true)
 }
 
 const isFavorited = computed(() => {
@@ -351,6 +363,43 @@ const AVERAGE_ENDPOINTS = {
   hourly: `${API_BASE}/daylyAverage`,
   dayly: `${API_BASE}/weeklyAverage`,
   weekly: `${API_BASE}/monthlyAverage`
+}
+
+const CACHE_PREFIX = 'klima:dashboard:'
+const CACHE_TTL = {
+  user: 5 * 60 * 1000,
+  sensorData: 60 * 1000,
+  averageData: 10 * 60 * 1000,
+  weather: 10 * 60 * 1000
+}
+const SENSOR_REFRESH_INTERVAL_MS = 60 * 1000
+const WEATHER_REFRESH_INTERVAL_MS = 10 * 60 * 1000
+const ENABLED_CHECK_INTERVAL_MS = 5 * 60 * 1000
+
+function readCache(key, maxAgeMs) {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + key)
+    if (!raw) return null
+
+    const cached = JSON.parse(raw)
+    if (!cached || Date.now() - cached.savedAt > maxAgeMs) return null
+
+    return cached.value
+  } catch (error) {
+    console.warn('Failed to read dashboard cache:', error)
+    return null
+  }
+}
+
+function writeCache(key, value) {
+  try {
+    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({
+      savedAt: Date.now(),
+      value
+    }))
+  } catch (error) {
+    console.warn('Failed to write dashboard cache:', error)
+  }
 }
 
 // Reactive state — fetched from actual API
@@ -810,7 +859,14 @@ const pastGraphBars = computed(() => {
   })
 })
 
-async function fetchAverageData() {
+async function fetchAverageData(force = false) {
+  const cacheKey = `average:${userUID.value || 'all'}`
+  const cached = force ? null : readCache(cacheKey, CACHE_TTL.averageData)
+  if (cached) {
+    graphData.value = cached
+    return
+  }
+
   try {
     const params = userUID.value ? { uid: userUID.value } : {}
     
@@ -851,6 +907,7 @@ async function fetchAverageData() {
     graphData.value.temperature.weekly = ensureLastN(graphData.value.temperature.weekly, 30)
     graphData.value.humidity.weekly = ensureLastN(graphData.value.humidity.weekly, 30)
     graphData.value.co2.weekly = ensureLastN(graphData.value.co2.weekly, 30)
+    writeCache(cacheKey, graphData.value)
   } catch (error) {
     console.error('Average data fetch error:', error.message)
   }
@@ -886,7 +943,14 @@ async function checkUserEnabled() {
   }
 }
 
-function fetchData() {
+function fetchData(force = false) {
+  const cacheKey = `sensor-data:${userUID.value || 'all'}`
+  const cached = force ? null : readCache(cacheKey, CACHE_TTL.sensorData)
+  if (cached) {
+    applySensorData(cached)
+    return
+  }
+
   const endpoint = userUID.value ? `${API_BASE}?uid=${userUID.value}` : API_BASE
   
   axios.get(endpoint)
@@ -894,19 +958,8 @@ function fetchData() {
       console.log('Indoor sensor full response:', response.data)
       // Handle array response — take the latest (first) reading
       const data = Array.isArray(response.data) ? response.data[0] : response.data
-      console.log('Sensor data object keys:', Object.keys(data))
-      console.log('Sensor data object:', data)
-      
-      temperature.value = data.temperature
-      humidity.value = data.humidity
-      // CO2 field is named cO2PPM in the API
-      co2.value = data.cO2PPM || null
-      
-      sensorOnline.value = true
-      indoorLoading.value = false
-      lastUpdated.value = new Date().toLocaleTimeString()
-      justUpdated.value = true
-      setTimeout(() => { justUpdated.value = false }, 2000)
+      writeCache(cacheKey, data)
+      applySensorData(data)
     })
     .catch(error => {
       console.error('Indoor sensor fetch error:', error.message, error.response?.data)
@@ -915,141 +968,175 @@ function fetchData() {
     })
 }
 
-function fetchWeather() {
+function applySensorData(data) {
+  if (!data) {
+    sensorOnline.value = false
+    indoorLoading.value = false
+    return
+  }
+
+  console.log('Sensor data object keys:', Object.keys(data))
+  console.log('Sensor data object:', data)
+
+  temperature.value = data.temperature
+  humidity.value = data.humidity
+  // CO2 field is named cO2PPM in the API
+  co2.value = data.cO2PPM || null
+
+  sensorOnline.value = true
+  indoorLoading.value = false
+  lastUpdated.value = new Date().toLocaleTimeString()
+  justUpdated.value = true
+  setTimeout(() => { justUpdated.value = false }, 2000)
+}
+
+function fetchWeather(force = false) {
+  const cacheKey = `weather:${weatherLat.value}:${weatherLon.value}`
+  const cached = force ? null : readCache(cacheKey, CACHE_TTL.weather)
+  if (cached) {
+    applyWeatherData(cached)
+    return
+  }
+
   axios.get(buildOpenMeteoUrl(weatherLat.value, weatherLon.value))
     .then(response => {
-      const current = response.data.current
-      outdoorTemp.value = current.temperature_2m
-      outdoorHumidity.value = current.relative_humidity_2m
-      outdoorWind.value = Math.round(current.wind_speed_10m)
-      weatherCode.value = current.weather_code
-      weatherDesc.value = WMO_DESCRIPTIONS[current.weather_code] || '—'
-
-      const daily = response.data.daily
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-      forecast.value = daily.time.slice(1, 6).map((dateStr, i) => {
-        const [y, m, d] = dateStr.split('-').map(Number)
-        const localDate = new Date(y, m - 1, d)
-        return { day: dayNames[localDate.getDay()], temp: Math.round(daily.temperature_2m_max[i + 1]), emoji: WMO_EMOJIS[daily.weather_code[i + 1]] || '🌡️' }
-      })
-
-      // Process hourly data for 24-hour period
-      if (response.data.hourly && response.data.hourly.time) {
-        const hourly = response.data.hourly
-        const times = hourly.time
-        const temps = hourly.temperature_2m
-        const humidities = hourly.relative_humidity_2m
-        
-        // Get the last 24 hours of data
-        const last24Index = Math.max(0, times.length - 24)
-        const last24Times = times.slice(last24Index)
-        const last24Temps = temps.slice(last24Index)
-        const last24Humidities = humidities.slice(last24Index)
-        
-        pastWeatherReadings.value.temperature.hourly = last24Times.map((timeStr, idx) => {
-          const dt = new Date(timeStr + 'Z')
-          const label = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          return {
-            label,
-            value: last24Temps[idx],
-            missing: last24Temps[idx] === null || last24Temps[idx] === undefined
-          }
-        })
-        
-        pastWeatherReadings.value.humidity.hourly = last24Times.map((timeStr, idx) => {
-          const dt = new Date(timeStr + 'Z')
-          const label = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          return {
-            label,
-            value: last24Humidities[idx],
-            missing: last24Humidities[idx] === null || last24Humidities[idx] === undefined
-          }
-        })
-
-        // Calculate daily aggregates from hourly data for 7 and 30 day periods
-        const dailyAggregates = {}
-        times.forEach((timeStr, idx) => {
-          const date = new Date(timeStr + 'Z')
-          const dateKey = date.toISOString().split('T')[0]
-          
-          if (!dailyAggregates[dateKey]) {
-            dailyAggregates[dateKey] = {
-              temps: [],
-              humidities: [],
-              date: dateKey
-            }
-          }
-          
-          if (temps[idx] !== null && temps[idx] !== undefined) {
-            dailyAggregates[dateKey].temps.push(temps[idx])
-          }
-          if (humidities[idx] !== null && humidities[idx] !== undefined) {
-            dailyAggregates[dateKey].humidities.push(humidities[idx])
-          }
-        })
-
-        // Convert to array and sort by date
-        const sortedDates = Object.values(dailyAggregates)
-          .sort((a, b) => new Date(a.date) - new Date(b.date))
-
-        // 7-day data
-        const last7Days = sortedDates.slice(-7)
-        pastWeatherReadings.value.temperature.daily = last7Days.map((day) => {
-          const dt = new Date(day.date + 'T00:00:00Z')
-          const label = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt)
-          const avgTemp = day.temps.length > 0 ? day.temps.reduce((a, b) => a + b) / day.temps.length : null
-          return {
-            label,
-            value: avgTemp,
-            missing: avgTemp === null
-          }
-        })
-        
-        pastWeatherReadings.value.humidity.daily = last7Days.map((day) => {
-          const dt = new Date(day.date + 'T00:00:00Z')
-          const label = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt)
-          const avgHumidity = day.humidities.length > 0 ? day.humidities.reduce((a, b) => a + b) / day.humidities.length : null
-          return {
-            label,
-            value: avgHumidity,
-            missing: avgHumidity === null
-          }
-        })
-
-        // 30-day data
-        const last30Days = sortedDates.slice(-30)
-        pastWeatherReadings.value.temperature.weekly = last30Days.map((day) => {
-          const dt = new Date(day.date + 'T00:00:00Z')
-          const label = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(dt)
-          const avgTemp = day.temps.length > 0 ? day.temps.reduce((a, b) => a + b) / day.temps.length : null
-          return {
-            label,
-            value: avgTemp,
-            missing: avgTemp === null
-          }
-        })
-        
-        pastWeatherReadings.value.humidity.weekly = last30Days.map((day) => {
-          const dt = new Date(day.date + 'T00:00:00Z')
-          const label = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(dt)
-          const avgHumidity = day.humidities.length > 0 ? day.humidities.reduce((a, b) => a + b) / day.humidities.length : null
-          return {
-            label,
-            value: avgHumidity,
-            missing: avgHumidity === null
-          }
-        })
-      }
+      writeCache(cacheKey, response.data)
+      applyWeatherData(response.data)
     })
     .catch(err => {
       console.error('Weather fetch error:', err)
     })
 }
 
-function fetchAll() {
-  fetchData()
-  fetchWeather()
-  fetchAverageData()
+function applyWeatherData(weatherData) {
+  const current = weatherData.current
+  outdoorTemp.value = current.temperature_2m
+  outdoorHumidity.value = current.relative_humidity_2m
+  outdoorWind.value = Math.round(current.wind_speed_10m)
+  weatherCode.value = current.weather_code
+  weatherDesc.value = WMO_DESCRIPTIONS[current.weather_code] || '—'
+
+  const daily = weatherData.daily
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  forecast.value = daily.time.slice(1, 6).map((dateStr, i) => {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const localDate = new Date(y, m - 1, d)
+    return { day: dayNames[localDate.getDay()], temp: Math.round(daily.temperature_2m_max[i + 1]), emoji: WMO_EMOJIS[daily.weather_code[i + 1]] || '🌡️' }
+  })
+
+  // Process hourly data for 24-hour period
+  if (weatherData.hourly && weatherData.hourly.time) {
+    const hourly = weatherData.hourly
+    const times = hourly.time
+    const temps = hourly.temperature_2m
+    const humidities = hourly.relative_humidity_2m
+    
+    // Get the last 24 hours of data
+    const last24Index = Math.max(0, times.length - 24)
+    const last24Times = times.slice(last24Index)
+    const last24Temps = temps.slice(last24Index)
+    const last24Humidities = humidities.slice(last24Index)
+    
+    pastWeatherReadings.value.temperature.hourly = last24Times.map((timeStr, idx) => {
+      const dt = new Date(timeStr + 'Z')
+      const label = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return {
+        label,
+        value: last24Temps[idx],
+        missing: last24Temps[idx] === null || last24Temps[idx] === undefined
+      }
+    })
+    
+    pastWeatherReadings.value.humidity.hourly = last24Times.map((timeStr, idx) => {
+      const dt = new Date(timeStr + 'Z')
+      const label = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return {
+        label,
+        value: last24Humidities[idx],
+        missing: last24Humidities[idx] === null || last24Humidities[idx] === undefined
+      }
+    })
+
+    // Calculate daily aggregates from hourly data for 7 and 30 day periods
+    const dailyAggregates = {}
+    times.forEach((timeStr, idx) => {
+      const date = new Date(timeStr + 'Z')
+      const dateKey = date.toISOString().split('T')[0]
+      
+      if (!dailyAggregates[dateKey]) {
+        dailyAggregates[dateKey] = {
+          temps: [],
+          humidities: [],
+          date: dateKey
+        }
+      }
+      
+      if (temps[idx] !== null && temps[idx] !== undefined) {
+        dailyAggregates[dateKey].temps.push(temps[idx])
+      }
+      if (humidities[idx] !== null && humidities[idx] !== undefined) {
+        dailyAggregates[dateKey].humidities.push(humidities[idx])
+      }
+    })
+
+    // Convert to array and sort by date
+    const sortedDates = Object.values(dailyAggregates)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+    // 7-day data
+    const last7Days = sortedDates.slice(-7)
+    pastWeatherReadings.value.temperature.daily = last7Days.map((day) => {
+      const dt = new Date(day.date + 'T00:00:00Z')
+      const label = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt)
+      const avgTemp = day.temps.length > 0 ? day.temps.reduce((a, b) => a + b) / day.temps.length : null
+      return {
+        label,
+        value: avgTemp,
+        missing: avgTemp === null
+      }
+    })
+    
+    pastWeatherReadings.value.humidity.daily = last7Days.map((day) => {
+      const dt = new Date(day.date + 'T00:00:00Z')
+      const label = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt)
+      const avgHumidity = day.humidities.length > 0 ? day.humidities.reduce((a, b) => a + b) / day.humidities.length : null
+      return {
+        label,
+        value: avgHumidity,
+        missing: avgHumidity === null
+      }
+    })
+
+    // 30-day data
+    const last30Days = sortedDates.slice(-30)
+    pastWeatherReadings.value.temperature.weekly = last30Days.map((day) => {
+      const dt = new Date(day.date + 'T00:00:00Z')
+      const label = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(dt)
+      const avgTemp = day.temps.length > 0 ? day.temps.reduce((a, b) => a + b) / day.temps.length : null
+      return {
+        label,
+        value: avgTemp,
+        missing: avgTemp === null
+      }
+    })
+    
+    pastWeatherReadings.value.humidity.weekly = last30Days.map((day) => {
+      const dt = new Date(day.date + 'T00:00:00Z')
+      const label = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(dt)
+      const avgHumidity = day.humidities.length > 0 ? day.humidities.reduce((a, b) => a + b) / day.humidities.length : null
+      return {
+        label,
+        value: avgHumidity,
+        missing: avgHumidity === null
+      }
+    })
+  }
+}
+
+function fetchAll(force = false) {
+  fetchData(force)
+  fetchWeather(force)
+  fetchAverageData(force)
 }
 
 onMounted(() => {
@@ -1059,9 +1146,9 @@ onMounted(() => {
   // Initialize user and sensors first, then fetch data
   initializeUser().then(() => {
     fetchAll()
-    refreshInterval = setInterval(fetchData, 30000)
-    weatherInterval = setInterval(fetchWeather, 600000)
-    enabledCheckInterval = setInterval(checkUserEnabled, 30000)
+    refreshInterval = setInterval(fetchData, SENSOR_REFRESH_INTERVAL_MS)
+    weatherInterval = setInterval(fetchWeather, WEATHER_REFRESH_INTERVAL_MS)
+    enabledCheckInterval = setInterval(checkUserEnabled, ENABLED_CHECK_INTERVAL_MS)
   })
 })
 
@@ -1358,7 +1445,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="button-section">
-      <button @click="fetchAll" class="refresh-btn">Refresh All</button>
+      <button @click="fetchAll(true)" class="refresh-btn">Refresh All</button>
       <div class="update-status">
         <span v-if="lastUpdated" :class="['update-time', { 'just-updated': justUpdated }]">
           {{ justUpdated ? 'Sensor updated!' : 'Sensor updated: ' + lastUpdated }}
@@ -1490,5 +1577,3 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-
