@@ -27,7 +27,9 @@ const comfortHumiditySettings = ref({
 })
 
 const settingsModalOpen = ref(false)
+const tempDangerConfirm = ref(false)
 const humiditySettingsModalOpen = ref(false)
+const humidityDangerConfirm = ref(false)
 const settingsFormData = ref({
   tempMin: 18,
   tempMax: 24,
@@ -131,6 +133,31 @@ function openSettingsModal() {
 
 function closeSettingsModal() {
   settingsModalOpen.value = false
+  tempDangerConfirm.value = false
+}
+
+const tempDangerWarnings = computed(() => {
+  const warnings = []
+  if (settingsFormData.value.tempMin < 16)
+    warnings.push(`Minimum ${settingsFormData.value.tempMin}°C is below the recommended range — WHO recommends at least 16°C to avoid respiratory problems.`)
+  if (settingsFormData.value.tempMax > 28)
+    warnings.push(`Maximum ${settingsFormData.value.tempMax}°C is above the recommended range — above 28°C may cause heat stress and reduced productivity.`)
+  return warnings
+})
+
+function handleSaveTemp() {
+  if (tempDangerWarnings.value.length > 0) {
+    tempDangerConfirm.value = true
+  } else {
+    saveComfortTemp()
+    closeSettingsModal()
+  }
+}
+
+function confirmSaveTemp() {
+  tempDangerConfirm.value = false
+  saveComfortTemp()
+  closeSettingsModal()
 }
 
 function openHumiditySettingsModal() {
@@ -141,6 +168,31 @@ function openHumiditySettingsModal() {
 
 function closeHumiditySettingsModal() {
   humiditySettingsModalOpen.value = false
+  humidityDangerConfirm.value = false
+}
+
+const humidityDangerWarnings = computed(() => {
+  const warnings = []
+  if (settingsFormData.value.humidityMin < 30)
+    warnings.push(`Minimum ${settingsFormData.value.humidityMin}% is below the recommended range — may cause dry skin, static electricity and respiratory irritation.`)
+  if (settingsFormData.value.humidityMax > 60)
+    warnings.push(`Maximum ${settingsFormData.value.humidityMax}% is above the recommended range — may promote mould, dust mites and bacteria growth.`)
+  return warnings
+})
+
+function handleSaveHumidity() {
+  if (humidityDangerWarnings.value.length > 0) {
+    humidityDangerConfirm.value = true
+  } else {
+    saveComfortHumidity()
+    closeHumiditySettingsModal()
+  }
+}
+
+function confirmSaveHumidity() {
+  humidityDangerConfirm.value = false
+  saveComfortHumidity()
+  closeHumiditySettingsModal()
 }
 
 // Initialize user data from Firebase
@@ -366,7 +418,6 @@ const outdoorWind = ref(null)
 const weatherCode = ref(null)
 const weatherDesc = ref('—')
 const forecast = ref([])
-const pastReadings = ref([])
 const pastWeatherReadings = ref({
   temperature: {
     hourly: [],
@@ -386,10 +437,7 @@ const graphData = ref({
   co2: { unit: 'ppm', hourly: [], dayly: [], weekly: [] }
 })
 
-const pastReadingsGraphData = ref({
-  temperature: [],
-  humidity: []
-})
+
 
 const lastUpdated = ref(null)
 const justUpdated = ref(false)
@@ -1065,17 +1113,6 @@ onMounted(() => {
   })
 })
 
-async function signOut() {
-  try {
-    if (firebaseAuth) {
-      await firebaseAuth.signOut()
-      router.push('/signin')
-    }
-  } catch (error) {
-    console.error('Sign out error:', error)
-  }
-}
-
 onBeforeUnmount(() => {
   clearInterval(refreshInterval)
   clearInterval(weatherInterval)
@@ -1381,50 +1418,61 @@ onBeforeUnmount(() => {
         <div class="modal-body">
           <p class="modal-description">Set your comfortable temperature range. The visual indicators will update to match your preferences.</p>
 
-          <!-- Temperature Section -->
-          <div class="settings-section">
-            <h3 class="section-title">Temperature (°C)</h3>
-            <div class="form-group">
-              <label for="min-temp">Minimum Comfortable Temperature</label>
-              <input
-                id="min-temp"
-                v-model.number="settingsFormData.tempMin"
-                type="number"
-                min="5"
-                max="35"
-                step="0.5"
-                class="form-input"
-              />
-            </div>
+          <!-- Recommended range info -->
+          <div class="humidity-recommendation">
+            <p>
+              <strong>Recommended indoor temperature: 18–24°C</strong><br>
+              Below 16°C may cause respiratory problems (WHO). Above 28°C may cause heat stress and reduced productivity.
+            </p>
+          </div>
 
-            <div class="form-group">
-              <label for="max-temp">Maximum Comfortable Temperature</label>
-              <input
-                id="max-temp"
-                v-model.number="settingsFormData.tempMax"
-                type="number"
-                min="5"
-                max="35"
-                step="0.5"
-                class="form-input"
-              />
-            </div>
+          <!-- Danger warning (live) -->
+          <div v-if="tempDangerWarnings.length > 0 && !tempDangerConfirm" class="humidity-danger-warning">
+            <p v-for="w in tempDangerWarnings" :key="w">⚠️ {{ w }}</p>
+          </div>
 
-            <div class="settings-preview">
-              <p class="preview-label">Preview:</p>
-              <div class="preview-info">
-                <span class="preview-range">Good: {{ settingsFormData.tempMin }}–{{ settingsFormData.tempMax }}°C</span>
-                <span class="preview-warning">Warning: {{ settingsFormData.tempMin - 3 }}–{{ settingsFormData.tempMin }}°C or {{ settingsFormData.tempMax }}–{{ settingsFormData.tempMax + 3 }}°C</span>
-              </div>
+          <!-- Confirmation step -->
+          <div v-if="tempDangerConfirm" class="humidity-danger-confirm">
+            <p>⚠️ <strong>Are you sure?</strong> The values you entered are outside the recommended safe range:</p>
+            <ul>
+              <li v-for="w in tempDangerWarnings" :key="w">{{ w }}</li>
+            </ul>
+            <p>Saving these values may result in an unhealthy indoor environment.</p>
+            <div class="confirm-btn-group">
+              <button class="btn-danger" @click="confirmSaveTemp">Yes, save anyway</button>
+              <button class="btn-cancel" @click="tempDangerConfirm = false">Go back</button>
             </div>
           </div>
+
+          <!-- Form (hidden during confirmation) -->
+          <template v-if="!tempDangerConfirm">
+            <div class="settings-section">
+              <h3 class="section-title">Temperature (°C)</h3>
+              <div class="form-group">
+                <label for="min-temp">Minimum Comfortable Temperature</label>
+                <input id="min-temp" v-model.number="settingsFormData.tempMin" type="number" min="5" max="35" step="0.5" class="form-input"/>
+              </div>
+              <div class="form-group">
+                <label for="max-temp">Maximum Comfortable Temperature</label>
+                <input id="max-temp" v-model.number="settingsFormData.tempMax" type="number" min="5" max="35" step="0.5" class="form-input"/>
+              </div>
+              <div class="settings-preview">
+                <p class="preview-label">Preview:</p>
+                <div class="preview-info">
+                  <span class="preview-range">Good: {{ settingsFormData.tempMin }}–{{ settingsFormData.tempMax }}°C</span>
+                  <span class="preview-warning">Warning zones: {{ settingsFormData.tempMin - 3 }}–{{ settingsFormData.tempMin }}°C or {{ settingsFormData.tempMax }}–{{ settingsFormData.tempMax + 3 }}°C</span>
+                  <span class="preview-danger">Danger zones: below {{ settingsFormData.tempMin - 3 }}°C or above {{ settingsFormData.tempMax + 3 }}°C</span>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
 
-        <div class="modal-footer">
+        <div v-if="!tempDangerConfirm" class="modal-footer">
           <button class="btn-secondary" @click="resetComfortTemp">Reset to Defaults</button>
           <div class="button-group">
             <button class="btn-cancel" @click="closeSettingsModal">Cancel</button>
-            <button class="btn-primary" @click="saveComfortTemp(); closeSettingsModal()">Save Changes</button>
+            <button class="btn-primary" @click="handleSaveTemp">Save Changes</button>
           </div>
         </div>
       </div>
@@ -1440,50 +1488,67 @@ onBeforeUnmount(() => {
         <div class="modal-body">
           <p class="modal-description">Set your comfortable humidity range. The visual indicators will update to match your preferences.</p>
 
-          <!-- Humidity Section -->
-          <div class="settings-section">
-            <h3 class="section-title">Humidity (%)</h3>
-            <div class="form-group">
-              <label for="min-humidity">Minimum Comfortable Humidity</label>
-              <input
-                id="min-humidity"
-                v-model.number="settingsFormData.humidityMin"
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                class="form-input"
-              />
-            </div>
+          <!-- Recommended range info -->
+          <div class="humidity-recommendation">
+            <p>
+              <strong>Recommended indoor humidity: 30–60%</strong><br>
+              Below 30% can cause dry skin and respiratory irritation. Above 60% may promote mould and dust mites.
+            </p>
+            <a href="https://www.mayoclinic.org/diseases-conditions/common-cold/in-depth/humidifiers/art-20048021#main-content" target="_blank" rel="noopener" class="humidity-source-link">
+              📖 Mayo Clinic — Humidifiers and Indoor Humidity
+            </a>
+            <a href="https://awgeurope.com/what-humidity-level-is-good-for-your-body/" target="_blank" rel="noopener" class="humidity-source-link">
+              📖 AWG Europe — What Humidity Level Is Good for Your Body?
+            </a>
+          </div>
 
-            <div class="form-group">
-              <label for="max-humidity">Maximum Comfortable Humidity</label>
-              <input
-                id="max-humidity"
-                v-model.number="settingsFormData.humidityMax"
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                class="form-input"
-              />
-            </div>
+          <!-- Danger warning (live) -->
+          <div v-if="humidityDangerWarnings.length > 0 && !humidityDangerConfirm" class="humidity-danger-warning">
+            <p v-for="w in humidityDangerWarnings" :key="w">⚠️ {{ w }}</p>
+          </div>
 
-            <div class="settings-preview">
-              <p class="preview-label">Preview:</p>
-              <div class="preview-info">
-                <span class="preview-range">Good: {{ settingsFormData.humidityMin }}–{{ settingsFormData.humidityMax }}%</span>
-                <span class="preview-warning">Warning: {{ settingsFormData.humidityMin - 10 }}–{{ settingsFormData.humidityMin }}% or {{ settingsFormData.humidityMax }}–{{ settingsFormData.humidityMax + 10 }}%</span>
-              </div>
+          <!-- Confirmation step -->
+          <div v-if="humidityDangerConfirm" class="humidity-danger-confirm">
+            <p>⚠️ <strong>Are you sure?</strong> The values you entered are outside the recommended safe range:</p>
+            <ul>
+              <li v-for="w in humidityDangerWarnings" :key="w">{{ w }}</li>
+            </ul>
+            <p>Saving these values may result in an unhealthy indoor environment.</p>
+            <div class="confirm-btn-group">
+              <button class="btn-danger" @click="confirmSaveHumidity">Yes, save anyway</button>
+              <button class="btn-cancel" @click="humidityDangerConfirm = false">Go back</button>
             </div>
           </div>
+
+          <!-- Form (hidden during confirmation) -->
+          <template v-if="!humidityDangerConfirm">
+            <div class="settings-section">
+              <h3 class="section-title">Humidity (%)</h3>
+              <div class="form-group">
+                <label for="min-humidity">Minimum Comfortable Humidity</label>
+                <input id="min-humidity" v-model.number="settingsFormData.humidityMin" type="number" min="0" max="100" step="1" class="form-input"/>
+              </div>
+              <div class="form-group">
+                <label for="max-humidity">Maximum Comfortable Humidity</label>
+                <input id="max-humidity" v-model.number="settingsFormData.humidityMax" type="number" min="0" max="100" step="1" class="form-input"/>
+              </div>
+              <div class="settings-preview">
+                <p class="preview-label">Preview:</p>
+                <div class="preview-info">
+                  <span class="preview-range">Good: {{ settingsFormData.humidityMin }}–{{ settingsFormData.humidityMax }}%</span>
+                  <span class="preview-warning">Warning zones: {{ settingsFormData.humidityMin - 10 }}–{{ settingsFormData.humidityMin }}% or {{ settingsFormData.humidityMax }}–{{ settingsFormData.humidityMax + 10 }}%</span>
+                  <span class="preview-danger">Danger zones: below {{ settingsFormData.humidityMin - 10 }}% or above {{ settingsFormData.humidityMax + 10 }}%</span>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
 
-        <div class="modal-footer">
+        <div v-if="!humidityDangerConfirm" class="modal-footer">
           <button class="btn-secondary" @click="resetComfortHumidity">Reset to Defaults</button>
           <div class="button-group">
             <button class="btn-cancel" @click="closeHumiditySettingsModal">Cancel</button>
-            <button class="btn-primary" @click="saveComfortHumidity(); closeHumiditySettingsModal()">Save Changes</button>
+            <button class="btn-primary" @click="handleSaveHumidity">Save Changes</button>
           </div>
         </div>
       </div>

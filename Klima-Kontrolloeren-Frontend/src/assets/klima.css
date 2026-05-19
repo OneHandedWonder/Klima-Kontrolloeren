@@ -809,6 +809,7 @@ header.header {
   top: 0;
   left: 0;
   right: 0;
+  overflow-y: auto;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
@@ -823,6 +824,9 @@ header.header {
   border: 1px solid rgba(88, 166, 255, 0.3);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
   width: 90%;
   max-width: 450px;
   animation: slideUp 0.3s ease;
@@ -866,6 +870,8 @@ header.header {
 
 .modal-body {
   padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .modal-description {
@@ -936,6 +942,11 @@ header.header {
 
 .preview-range {
   color: #4CAF50;
+  font-weight: 500;
+}
+
+.preview-danger {
+  color: #f44336;
   font-weight: 500;
 }
 
@@ -1052,4 +1063,76 @@ header.header {
   color: #79c0ff;
   font-weight: 600;
   letter-spacing: 0.3px;
+}
+
+/* Humidity modal additions */
+.humidity-recommendation {
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-left: 4px solid #58a6ff;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 0.88rem;
+  color: #c9d1d9;
+  line-height: 1.5;
+}
+
+.humidity-source-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: #58a6ff;
+  text-decoration: none;
+}
+.humidity-source-link:hover { text-decoration: underline; }
+
+.humidity-danger-warning {
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 152, 0, 0.35);
+  border-left: 4px solid #FF9800;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  color: #ffd59e;
+  line-height: 1.5;
+}
+
+.humidity-danger-confirm {
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-left: 4px solid #f44336;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 0.88rem;
+  color: #ffb3ae;
+  line-height: 1.6;
+}
+.humidity-danger-confirm ul {
+  margin: 8px 0 12px 18px;
+  color: #ffd5d2;
+}
+.humidity-danger-confirm p { margin: 0 0 8px; }
+
+.confirm-btn-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.btn-danger {
+  padding: 0.6rem 1rem;
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(244, 67, 54, 0.5);
+  color: #f44336;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.btn-danger:hover {
+  background: rgba(244, 67, 54, 0.3);
+  border-color: #f44336;
 }
