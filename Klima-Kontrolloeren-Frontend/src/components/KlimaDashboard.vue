@@ -547,6 +547,21 @@ const climateAction = computed(() => {
   return '✅ Indoor climate is stable — no automatic action needed.'
 })
 
+const climateActionStatus = computed(() => {
+  if (temperature.value === null || humidity.value === null || co2.value === null) return 'neutral'
+  const { max, min, warning } = comfortSettings.value
+  const { max: humMax, min: humMin, warning: humWarning } = comfortHumiditySettings.value
+  const tempAlarmHigh = max + warning
+  const tempAlarmLow = min - warning
+  const humAlarmHigh = humMax + humWarning
+  const humAlarmLow = humMin - humWarning
+  // Red: alarm thresholds breached
+  if (co2.value > 1200 || temperature.value > tempAlarmHigh || temperature.value < tempAlarmLow || humidity.value > humAlarmHigh || humidity.value < humAlarmLow) return 'bad'
+  // Orange: outside comfort range but not yet at alarm
+  if (co2.value >= 800 || temperature.value > max || temperature.value < min || humidity.value > humMax || humidity.value < humMin) return 'warning'
+  return 'good'
+})
+
 
 
 
@@ -1176,7 +1191,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- System feedback bar -->
-    <div class="system-feedback-bar">
+    <div :class="['system-feedback-bar', climateActionStatus]">
       <h3>Automatic Climate System</h3>
       <p class="system-feedback-text">{{ climateAction }}</p>
     </div>
