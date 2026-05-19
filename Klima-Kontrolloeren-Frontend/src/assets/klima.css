@@ -275,20 +275,111 @@ body {
   .dashboard-container { grid-template-columns: 1fr }
 }
 
+@media (max-width: 768px) {
+  header.header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .header-center {
+    order: 2;
+    width: 100%;
+    text-align: center;
+  }
+
+  .header-right {
+    order: 1;
+    position: static !important;
+    right: auto !important;
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: 20px;
+    margin-bottom: 12px;
+  }
+
+  .header h1 {
+    font-size: 28px;
+    letter-spacing: 2px;
+  }
+
+  /* Shrink user pill on mobile */
+  .user-info {
+    padding: 0.2rem 0.5rem;
+    gap: 0.25rem;
+  }
+
+  .user-avatar {
+    width: 14px !important;
+    height: 14px !important;
+    font-size: 0.4rem !important;
+    flex-shrink: 0;
+  }
+
+  .user-email {
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: none !important;
+  }
+
+  /* Shrink sign out on mobile */
+  .topbar button {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+  }
+
+  body {
+    padding: 16px 16px;
+  }
+}
+
 .system-feedback-bar {
   width: 100%;
   padding: 14px 20px;
   margin-bottom: 30px;
   border-radius: 10px;
+  backdrop-filter: blur(8px);
+  transition: background 0.4s ease, border-color 0.4s ease;
+}
+
+/* Good — green */
+.system-feedback-bar.good {
   background: linear-gradient(90deg, rgba(76,175,80,0.15) 0%, rgba(76,175,80,0.08) 100%);
   border: 1px solid rgba(76,175,80,0.25);
   border-left: 4px solid #4CAF50;
-  backdrop-filter: blur(8px);
 }
+.system-feedback-bar.good h3 { color: #a8d5b8; }
+
+/* Warning — orange */
+.system-feedback-bar.warning {
+  background: linear-gradient(90deg, rgba(255,152,0,0.15) 0%, rgba(255,152,0,0.08) 100%);
+  border: 1px solid rgba(255,152,0,0.25);
+  border-left: 4px solid #FF9800;
+}
+.system-feedback-bar.warning h3 { color: #ffd59e; }
+
+/* Bad — red */
+.system-feedback-bar.bad {
+  background: linear-gradient(90deg, rgba(244,67,54,0.15) 0%, rgba(244,67,54,0.08) 100%);
+  border: 1px solid rgba(244,67,54,0.25);
+  border-left: 4px solid #f44336;
+}
+.system-feedback-bar.bad h3 { color: #ffb3ae; }
+
+/* Neutral — waiting for data */
+.system-feedback-bar.neutral {
+  background: linear-gradient(90deg, rgba(127,168,191,0.12) 0%, rgba(127,168,191,0.06) 100%);
+  border: 1px solid rgba(127,168,191,0.2);
+  border-left: 4px solid #7fa8bf;
+}
+.system-feedback-bar.neutral h3 { color: #a0c4d4; }
 
 .system-feedback-bar h3 {
   margin: 0 0 6px 0;
-  color: #a8d5b8;
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0.5px;
