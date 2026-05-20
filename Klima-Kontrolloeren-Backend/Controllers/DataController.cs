@@ -41,22 +41,28 @@ public class DataController : ControllerBase
     [Route("weeklyAverage")]
     public async Task<IActionResult> GetWeeklyReadings([FromQuery] string? uid = null)
     {
-        var readings = string.IsNullOrWhiteSpace(uid)
-            ? await _sensorService.GetWeeklyReadingsAsync()
-            : await _sensorService.GetWeeklyReadingsAsync(uid);
+        if (string.IsNullOrWhiteSpace(uid))
+        {
+            var averages = await _sensorService.GetWeeklyAveragesAsync();
+            return Ok(averages);
+        }
 
-        var Average = AverageService.CalculateDailyAverages(readings);
-        return Ok(Average);
+        var readings = await _sensorService.GetWeeklyReadingsAsync(uid);
+        var average = AverageService.CalculateDailyAverages(readings);
+        return Ok(average);
     }
     [HttpGet]
     [Route("monthlyAverage")]
     public async Task<IActionResult> GetMonthlyReadings([FromQuery] string? uid = null)
     {
-        var readings = string.IsNullOrWhiteSpace(uid)
-            ? await _sensorService.GetMonthlyReadingsAsync()
-            : await _sensorService.GetMonthlyReadingsAsync(uid);
+        if (string.IsNullOrWhiteSpace(uid))
+        {
+            var averages = await _sensorService.GetMonthlyAveragesAsync();
+            return Ok(averages);
+        }
 
-        var Average = AverageService.CalculateWeeklyAverages(readings);
-        return Ok(Average);
+        var readings = await _sensorService.GetMonthlyReadingsAsync(uid);
+        var average = AverageService.CalculateMonthlyAverages(readings);
+        return Ok(average);
     }
 }

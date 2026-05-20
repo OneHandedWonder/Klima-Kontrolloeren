@@ -314,6 +314,73 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
 
         return readings;
     }
+
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
+    public async Task<List<AverageData>> GetWeeklyAveragesAsync()
+    {
+        const string sql = """
+            SELECT MyDate, Temperature, Humidity, CO2PPM
+            FROM Day7AVG
+            ORDER BY MyDate ASC
+            """;
+
+        var averages = new List<AverageData>();
+
+        await using var conn = new SqlConnection(_connectionString);
+        await using var cmd = new SqlCommand(sql, conn);
+
+        await conn.OpenAsync();
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        var index = 0;
+        while (await reader.ReadAsync())
+        {
+            averages.Add(new AverageData
+            {
+                TimePeriod = reader.GetDateTime(0),
+                ReadingCount = ++index,
+                AverageTemperature = Convert.ToDouble(reader.GetValue(1)),
+                AverageHumidity = Convert.ToDouble(reader.GetValue(2)),
+                AverageCO2PPM = Convert.ToDouble(reader.GetValue(3))
+            });
+        }
+
+        return averages;
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
+    public async Task<List<AverageData>> GetMonthlyAveragesAsync()
+    {
+        const string sql = """
+            SELECT MyDate, Temperature, Humidity, CO2PPM
+            FROM Day30AVG
+            ORDER BY MyDate ASC
+            """;
+
+        var averages = new List<AverageData>();
+
+        await using var conn = new SqlConnection(_connectionString);
+        await using var cmd = new SqlCommand(sql, conn);
+
+        await conn.OpenAsync();
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        var index = 0;
+        while (await reader.ReadAsync())
+        {
+            averages.Add(new AverageData
+            {
+                TimePeriod = reader.GetDateTime(0),
+                ReadingCount = ++index,
+                AverageTemperature = Convert.ToDouble(reader.GetValue(1)),
+                AverageHumidity = Convert.ToDouble(reader.GetValue(2)),
+                AverageCO2PPM = Convert.ToDouble(reader.GetValue(3))
+            });
+        }
+
+        return averages;
+    }
+
     [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetMonthlyReadingsAsync()
     {

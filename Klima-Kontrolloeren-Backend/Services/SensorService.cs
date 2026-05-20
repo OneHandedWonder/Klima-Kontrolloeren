@@ -62,6 +62,16 @@ public class SensorService : ISensorService
         return await _db.GetWeeklyReadingsAsync(uid);
     }
 
+    public async Task<List<AverageData>> GetWeeklyAveragesAsync()
+    {
+        return await _db.GetWeeklyAveragesAsync();
+    }
+
+    public async Task<List<AverageData>> GetMonthlyAveragesAsync()
+    {
+        return await _db.GetMonthlyAveragesAsync();
+    }
+
     public async Task<List<SensorReading>> GetMonthlyReadingsAsync()
     {
         return await _db.GetMonthlyReadingsAsync();
