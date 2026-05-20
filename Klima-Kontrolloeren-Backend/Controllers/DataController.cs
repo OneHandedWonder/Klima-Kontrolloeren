@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using KlimaKontrolloerenBackend.Models;
 using KlimaKontrolloerenBackend.Services;
 
@@ -6,6 +7,7 @@ namespace KlimaKontrolloerenBackend.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting("data")]
 public class DataController : ControllerBase
 {
     private readonly ISensorService _sensorService;
