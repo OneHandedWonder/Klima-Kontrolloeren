@@ -160,6 +160,28 @@ public class SensorServiceTests
     }
 
     [Fact]
+    public async Task GetWeeklyAveragesAsync_ReturnsDatabaseResult()
+    {
+        var expected = new List<AverageData> { new() { TimePeriod = DateTime.Today, AverageTemperature = 20 } };
+        _mockDb.Setup(x => x.GetWeeklyAveragesAsync()).ReturnsAsync(expected);
+
+        var result = await _sut.GetWeeklyAveragesAsync();
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task GetMonthlyAveragesAsync_ReturnsDatabaseResult()
+    {
+        var expected = new List<AverageData> { new() { TimePeriod = DateTime.Today, AverageTemperature = 20 } };
+        _mockDb.Setup(x => x.GetMonthlyAveragesAsync()).ReturnsAsync(expected);
+
+        var result = await _sut.GetMonthlyAveragesAsync();
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
     public async Task GetMonthlyReadingsAsync_ReturnsDatabaseResult()
     {
         var expected = new List<SensorReading> { new() { SensorId = "pi-sensor-01" } };

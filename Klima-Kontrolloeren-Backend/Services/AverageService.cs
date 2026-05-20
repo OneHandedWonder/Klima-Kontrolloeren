@@ -45,6 +45,11 @@ public class AverageService
         return result;
     }
 
+    public static List<AverageData> CalculateMonthlyAverages(List<SensorReading> readings)
+    {
+        return CalculateWeeklyAverages(readings);
+    }
+
     public static List<AverageData> CalculateDailyAverages(List<SensorReading> readings)
     {
         int totalDays = 7;
