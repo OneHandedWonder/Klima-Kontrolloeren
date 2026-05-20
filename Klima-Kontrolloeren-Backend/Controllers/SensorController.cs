@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Text.Json;
 using KlimaKontrolloerenBackend.Models;
 using KlimaKontrolloerenBackend.Services;
@@ -17,6 +18,7 @@ public class SensorController : ControllerBase
     }
 
     // POST api/sensor  ← Raspberry Pi sends readings here
+    [EnableRateLimiting("sensor-ingest")]
     [HttpPost]
     public async Task<IActionResult> PostReading([FromBody] SensorReadingDto dto)
     {
@@ -26,6 +28,8 @@ public class SensorController : ControllerBase
         await _sensorService.SaveReadingAsync(dto);
         return Created(string.Empty, new { message = "Reading saved." });
     }
+
+    [EnableRateLimiting("sensor-read")]
     [HttpGet]
     public async Task<IActionResult> GetUserSensors([FromQuery] string uid)
     {
