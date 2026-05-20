@@ -147,7 +147,7 @@ function closeHumiditySettingsModal() {
 async function initializeUser() {
   if (!firebaseAuth || !firebaseAuth.currentUser) {
     authInitialized.value = true
-    return
+    return false
   }
 
   currentUser.value = firebaseAuth.currentUser
@@ -156,8 +156,11 @@ async function initializeUser() {
   if (cachedUser) {
     userUID.value = cachedUser.uid
     userSensors.value = cachedUser.sensors || []
+    const isEnabled = await checkUserEnabled()
+    if (!isEnabled) return false
+
     authInitialized.value = true
-    return
+    return true
   }
   
   try {
@@ -186,6 +189,7 @@ async function initializeUser() {
       
       if (userData.enabled === false) {
         console.warn('User is disabled in the backend:', userUID.value)
+        clearDashboardCache()
         // Sign out and redirect to sign-in page
         if (firebaseAuth) {
           try {
@@ -197,7 +201,7 @@ async function initializeUser() {
         }
         // Redirect to sign-in page
         router.push('/signin')
-        return
+        return false
       }
       
       userSensors.value = userData.sensors || []
@@ -212,6 +216,7 @@ async function initializeUser() {
   }
   
   authInitialized.value = true
+  return true
 }
 
 // Dynamic Open-Meteo URL builder — defaults to Roskilde
@@ -399,6 +404,16 @@ function writeCache(key, value) {
     }))
   } catch (error) {
     console.warn('Failed to write dashboard cache:', error)
+  }
+}
+
+function clearDashboardCache() {
+  try {
+    Object.keys(localStorage)
+      .filter(key => key.startsWith(CACHE_PREFIX))
+      .forEach(key => localStorage.removeItem(key))
+  } catch (error) {
+    console.warn('Failed to clear dashboard cache:', error)
   }
 }
 
@@ -914,7 +929,7 @@ async function fetchAverageData(force = false) {
 }
 
 async function checkUserEnabled() {
-  if (!userUID.value) return
+  if (!userUID.value) return true
   
   try {
     const sensorResponse = await axios.get(
@@ -927,6 +942,7 @@ async function checkUserEnabled() {
       
       if (userData.enabled === false) {
         console.warn('User was disabled while logged in:', userUID.value)
+        clearDashboardCache()
         // Sign out and redirect
         if (firebaseAuth) {
           try {
@@ -936,10 +952,22 @@ async function checkUserEnabled() {
           }
         }
         router.push('/signin')
+        return false
+      }
+
+      userSensors.value = userData.sensors || userSensors.value
+      if (firebaseAuth?.currentUser) {
+        writeCache(`user:${firebaseAuth.currentUser.uid}`, {
+          uid: userUID.value,
+          sensors: userSensors.value
+        })
       }
     }
+
+    return true
   } catch (error) {
     console.error('Failed to check user enabled status:', error.message)
+    return true
   }
 }
 
@@ -1144,7 +1172,9 @@ onMounted(() => {
   loadComfortTemp()
   loadComfortHumidity()
   // Initialize user and sensors first, then fetch data
-  initializeUser().then(() => {
+  initializeUser().then((isEnabled) => {
+    if (!isEnabled) return
+
     fetchAll()
     refreshInterval = setInterval(fetchData, SENSOR_REFRESH_INTERVAL_MS)
     weatherInterval = setInterval(fetchWeather, WEATHER_REFRESH_INTERVAL_MS)
@@ -1154,6 +1184,7 @@ onMounted(() => {
 
 async function signOut() {
   try {
+    clearDashboardCache()
     if (firebaseAuth) {
       await firebaseAuth.signOut()
       router.push('/signin')

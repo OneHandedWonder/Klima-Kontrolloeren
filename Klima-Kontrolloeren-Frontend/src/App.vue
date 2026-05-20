@@ -9,6 +9,7 @@ const authLoading = ref(true)
 const route = useRoute()
 const router = useRouter()
 let unsubscribeAuth = null
+const DASHBOARD_CACHE_PREFIX = 'klima:dashboard:'
 
 onMounted(() => {
   if (!firebaseAuth) {
@@ -28,6 +29,13 @@ onBeforeUnmount(() => {
 
 async function handleSignOut() {
   if (!firebaseAuth) return
+  try {
+    Object.keys(localStorage)
+      .filter(key => key.startsWith(DASHBOARD_CACHE_PREFIX))
+      .forEach(key => localStorage.removeItem(key))
+  } catch (error) {
+    console.warn('Failed to clear dashboard cache:', error)
+  }
   await signOut(firebaseAuth)
   await router.push('/signin')
 }
