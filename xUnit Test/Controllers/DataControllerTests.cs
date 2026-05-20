@@ -99,19 +99,19 @@ public class DataControllerTests
     [Fact]
     public async Task GetWeeklyReadings_ReturnsSevenDailyAverageBuckets()
     {
-        var today = DateTime.Today;
-        _sensorService.Setup(x => x.GetWeeklyReadingsAsync()).ReturnsAsync(new List<SensorReading>
+        var expected = new List<AverageData>
         {
-            new() { RecordedAt = today, Temperature = 18, Humidity = 40, CO2PPM = 400 },
-            new() { RecordedAt = today, Temperature = 22, Humidity = 50, CO2PPM = 440 }
-        });
+            new() { TimePeriod = DateTime.Today, AverageTemperature = 20, AverageHumidity = 45, AverageCO2PPM = 420 }
+        };
+
+        _sensorService.Setup(x => x.GetWeeklyAveragesAsync()).ReturnsAsync(expected);
 
         var result = await _sut.GetWeeklyReadings();
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var averages = Assert.IsType<List<AverageData>>(ok.Value);
-        Assert.Equal(7, averages.Count);
-        Assert.Equal(20, averages.Single(x => x.TimePeriod == today).AverageTemperature);
+        Assert.Same(expected, ok.Value);
+        _sensorService.Verify(x => x.GetWeeklyAveragesAsync(), Times.Once);
+        _sensorService.Verify(x => x.GetWeeklyReadingsAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -130,19 +130,19 @@ public class DataControllerTests
     [Fact]
     public async Task GetMonthlyReadings_ReturnsThirtyDailyAverageBuckets()
     {
-        var today = DateTime.Today;
-        _sensorService.Setup(x => x.GetMonthlyReadingsAsync()).ReturnsAsync(new List<SensorReading>
+        var expected = new List<AverageData>
         {
-            new() { RecordedAt = today, Temperature = 20, Humidity = 45, CO2PPM = 420 },
-            new() { RecordedAt = today, Temperature = 24, Humidity = 55, CO2PPM = 460 }
-        });
+            new() { TimePeriod = DateTime.Today, AverageTemperature = 22, AverageHumidity = 50, AverageCO2PPM = 440 }
+        };
+
+        _sensorService.Setup(x => x.GetMonthlyAveragesAsync()).ReturnsAsync(expected);
 
         var result = await _sut.GetMonthlyReadings();
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var averages = Assert.IsType<List<AverageData>>(ok.Value);
-        Assert.Equal(30, averages.Count);
-        Assert.Equal(22, averages.Single(x => x.TimePeriod == today).AverageTemperature);
+        Assert.Same(expected, ok.Value);
+        _sensorService.Verify(x => x.GetMonthlyAveragesAsync(), Times.Once);
+        _sensorService.Verify(x => x.GetMonthlyReadingsAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
