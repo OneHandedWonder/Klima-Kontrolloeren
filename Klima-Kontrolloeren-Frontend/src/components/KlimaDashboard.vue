@@ -1264,6 +1264,7 @@ onBeforeUnmount(() => {
           <div class="user-details">
             <p class="user-email">{{ currentUser.email }}</p>
           </div>
+          <router-link to="/profile" class="profile-button" title="Account settings">⚙️</router-link>
         </div>
       </div>
     </header>
@@ -1683,3 +1684,4 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
