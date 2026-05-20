@@ -754,6 +754,27 @@ header.header {
   text-overflow: ellipsis;
 }
 
+.profile-button {
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.profile-button:hover {
+  background: rgba(76, 175, 80, 0.15);
+  border-color: rgba(76, 175, 80, 0.3);
+  transform: scale(1.1);
+}
+
 /* Responsive weather layout fixes */
 .weather-top-row {
   display: flex;
