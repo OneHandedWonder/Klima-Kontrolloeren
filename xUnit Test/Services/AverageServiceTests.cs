@@ -40,6 +40,20 @@ public class AverageServiceTests
     }
 
     [Fact]
+    public void CalculateMonthlyAverages_ReturnsThirtyDaysAndNullsForMissingDays()
+    {
+        var result = AverageService.CalculateMonthlyAverages(new List<SensorReading>());
+
+        Assert.Equal(30, result.Count);
+        Assert.All(result, average =>
+        {
+            Assert.Null(average.AverageTemperature);
+            Assert.Null(average.AverageHumidity);
+            Assert.Null(average.AverageCO2PPM);
+        });
+    }
+
+    [Fact]
     public void CalculateHourlyAverages_ReturnsTwentyFourHoursWithExpectedAverage()
     {
         var now = DateTime.Now;
