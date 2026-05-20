@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
+import { signOut } from 'firebase/auth'
 import axios from 'axios'
 import { firebaseAuth } from '../firebase'
 
@@ -264,6 +265,12 @@ async function initializeUser() {
   }
   
   authInitialized.value = true
+}
+
+async function handleSignOut() {
+  if (!firebaseAuth) return
+  await signOut(firebaseAuth)
+  await router.push('/signin')
 }
 
 // Dynamic Open-Meteo URL builder — defaults to Roskilde
@@ -1223,6 +1230,8 @@ onBeforeUnmount(() => {
           <div class="user-details">
             <p class="user-email">{{ currentUser.email }}</p>
           </div>
+          <router-link to="/profile" class="profile-button" title="Account settings">⚙️</router-link>
+          <button type="button" @click="handleSignOut" class="sign-out-btn" title="Sign out">Sign out</button>
         </div>
       </div>
     </header>

@@ -36,10 +36,6 @@ async function handleSignOut() {
 <template>
   <div v-if="authLoading" class="auth-loading">Checking authentication...</div>
   <template v-else>
-    <header v-if="user && route.name === 'dashboard'" class="topbar">
-      <p>{{ }}</p>
-      <button type="button" @click="handleSignOut" class="sign-out-btn">Sign out</button>
-    </header>
     <RouterView />
   </template>
 </template>
