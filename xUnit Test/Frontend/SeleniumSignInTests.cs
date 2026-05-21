@@ -61,7 +61,7 @@ public sealed class SeleniumSignInTests : IClassFixture<ViteFrontendFixture>, ID
 
         Assert.Contains("Reset Your Password", _driver.PageSource);
 
-        _driver.FindElement(By.XPath("//button[contains(normalize-space(), 'Back to Sign in')]")).Click();
+        _driver.FindElement(By.CssSelector("button.back-button")).Click();
         _wait.Until(driver => driver.FindElement(By.CssSelector("button.submit-button")).Text == "Sign in");
 
         Assert.Contains("Sign in to your climate dashboard", _driver.PageSource);
@@ -101,8 +101,8 @@ public sealed class ViteFrontendFixture : IAsyncLifetime
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "npm",
-                Arguments = $"run dev -- --host 127.0.0.1 --port {port} --strictPort",
+                FileName = "cmd.exe",
+                Arguments = $"/c npm run dev -- --host 127.0.0.1 --port {port} --strictPort",
                 WorkingDirectory = frontendDirectory,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
