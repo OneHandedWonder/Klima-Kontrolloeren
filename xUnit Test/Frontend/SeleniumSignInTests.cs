@@ -70,7 +70,17 @@ public sealed class SeleniumSignInTests : IClassFixture<ViteFrontendFixture>, ID
     private void GoToSignInPage()
     {
         _driver.Navigate().GoToUrl(_fixture.SignInUrl);
-        _wait.Until(driver => driver.FindElement(By.CssSelector("h1")).Text == "Sign in to your climate dashboard");
+        _wait.Until(driver =>
+        {
+            try
+            {
+                return driver.FindElement(By.CssSelector("h1")).Text == "Sign in to your climate dashboard";
+            }
+            catch (WebDriverException)
+            {
+                return false;
+            }
+        });
     }
 
     public void Dispose()
@@ -99,16 +109,7 @@ public sealed class ViteFrontendFixture : IAsyncLifetime
 
         _viteProcess = new Process
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "cmd.exe",
-                Arguments = $"/c npm run dev -- --host 127.0.0.1 --port {port} --strictPort",
-                WorkingDirectory = frontendDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
+            StartInfo = CreateNpmStartInfo(frontendDirectory, port)
         };
 
         _viteProcess.Start();
@@ -117,13 +118,55 @@ public sealed class ViteFrontendFixture : IAsyncLifetime
 
     public Task DisposeAsync()
     {
-        if (_viteProcess is { HasExited: false })
+        if (_viteProcess is null)
+            return Task.CompletedTask;
+
+        try
         {
-            _viteProcess.Kill(entireProcessTree: true);
+            if (!_viteProcess.HasExited)
+                _viteProcess.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // The process may never have started if npm could not be launched.
+        }
+        finally
+        {
             _viteProcess.Dispose();
+            _viteProcess = null;
         }
 
         return Task.CompletedTask;
+    }
+
+    private static ProcessStartInfo CreateNpmStartInfo(string frontendDirectory, int port)
+    {
+        var arguments = $"npm run dev -- --host 127.0.0.1 --port {port} --strictPort";
+
+        if (OperatingSystem.IsWindows())
+        {
+            return new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c {arguments}",
+                WorkingDirectory = frontendDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+
+        return new ProcessStartInfo
+        {
+            FileName = "npm",
+            Arguments = $"run dev -- --host 127.0.0.1 --port {port} --strictPort",
+            WorkingDirectory = frontendDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
     }
 
     private static string FindFrontendDirectory()

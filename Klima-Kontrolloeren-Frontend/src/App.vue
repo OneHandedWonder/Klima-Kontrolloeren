@@ -20,6 +20,10 @@ onMounted(() => {
   unsubscribeAuth = onAuthStateChanged(firebaseAuth, (nextUser) => {
     user.value = nextUser
     authLoading.value = false
+
+    if (nextUser && route.meta.guestOnly) {
+      router.push('/dashboard')
+    }
   })
 })
 
@@ -42,7 +46,7 @@ async function handleSignOut() {
 </script>
 
 <template>
-  <div v-if="authLoading" class="auth-loading">Checking authentication...</div>
+  <div v-if="authLoading && !route.meta.guestOnly" class="auth-loading">Checking authentication...</div>
   <template v-else>
     <RouterView />
   </template>
