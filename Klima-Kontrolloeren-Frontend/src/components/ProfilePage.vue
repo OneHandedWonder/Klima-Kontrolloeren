@@ -14,12 +14,23 @@ const currentUser = firebaseAuth.currentUser
 const activeTab = ref('email') // 'email', 'password', or 'sensors'
 
 // ── Sensor state ──────────────────────────────────────────────
-const sensors = ref([])          // [{ sensorId, name, type, location, editing, tmpName, tmpType, tmpLocation }]
+const SENSOR_TYPES = ['Temperature', 'Humidity', 'CO₂']
+
+// Parse stored type string → array of selected types
+function parseTypes(typeStr) {
+  if (!typeStr) return []
+  return SENSOR_TYPES.filter(t => typeStr.includes(t))
+}
+// Array of selected types → stored string
+function joinTypes(arr) { return arr.join(', ') }
+
+const sensors = ref([])          // [{ sensorId, name, type, location, editing, tmpName, tmpTypes, tmpLocation }]
 const sensorsLoading = ref(false)
 const sensorsError = ref('')
 const sensorsSaving = ref(false)
 const newSensorId = ref('')
 const addingSensor = ref(false)
+const addSensorError = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -165,7 +176,7 @@ async function loadSensors() {
     const ids = res.data?.[0]?.sensors || []
     const entries = await Promise.all(ids.map(async id => {
       const r = await axios.get(`${SENSOR_API}/info`, { params: { uid, sensorId: id } }).catch(() => null)
-      return { sensorId: id, name: r?.data?.name || id, type: r?.data?.type || '', location: r?.data?.location || '', editing: false }
+      return { sensorId: id, name: r?.data?.name || id, type: r?.data?.type || '', location: r?.data?.location || '', editing: false, tmpName: '', tmpTypes: [], tmpLocation: '' }
     }))
     sensors.value = entries
   } catch {
@@ -176,18 +187,22 @@ async function loadSensors() {
 }
 
 function startEdit(sensor) {
-  // Copy current values into temps so Cancel can truly revert
-  sensor.tmpName = sensor.name
-  sensor.tmpType = sensor.type
+  // Save originals — these never change, used by Cancel and on save failure
+  sensor._origName     = sensor.name
+  sensor._origType     = sensor.type
+  sensor._origLocation = sensor.location
+  // Set editable copies — v-model binds to these
+  sensor.tmpName     = sensor.name
+  sensor.tmpTypes    = parseTypes(sensor.type)
   sensor.tmpLocation = sensor.location
   sensor.editing = true
 }
 
 function cancelEdit(sensor) {
-  // Restore originals — nothing actually changed
-  sensor.name = sensor.tmpName
-  sensor.type = sensor.tmpType
-  sensor.location = sensor.tmpLocation
+  // Restore originals — truly reverts all changes
+  sensor.name     = sensor._origName
+  sensor.type     = sensor._origType
+  sensor.location = sensor._origLocation
   sensor.editing = false
 }
 
@@ -195,16 +210,17 @@ async function saveEdit(sensor) {
   sensorsSaving.value = true
   errorMessage.value = ''
   try {
+    const typeStr = joinTypes(sensor.tmpTypes)
     await axios.put(`${SENSOR_API}/info`, {
       uid: currentUser.uid,
       sensorId: sensor.sensorId,
       name: sensor.tmpName.trim() || sensor.sensorId,
-      type: sensor.tmpType.trim(),
+      type: typeStr,
       location: sensor.tmpLocation.trim()
     })
     // Commit temps to real values only on success
     sensor.name = sensor.tmpName.trim() || sensor.sensorId
-    sensor.type = sensor.tmpType.trim()
+    sensor.type = typeStr
     sensor.location = sensor.tmpLocation.trim()
     sensor.editing = false
     successMessage.value = 'Sensor info saved.'
@@ -217,20 +233,25 @@ async function saveEdit(sensor) {
     else if (!status) errorMessage.value = 'Network error — check browser console (F12) for details.'
     else errorMessage.value = `Could not save (HTTP ${status}). ${detail || 'Please try again.'}`
     // Revert to originals on failure
-    sensor.name = sensor.tmpName
-    sensor.type = sensor.tmpType
-    sensor.location = sensor.tmpLocation
+    sensor.name     = sensor._origName
+    sensor.type     = sensor._origType
+    sensor.location = sensor._origLocation
   } finally { sensorsSaving.value = false }
 }
 
 async function addSensor() {
   if (!newSensorId.value.trim()) return
   addingSensor.value = true
+  addSensorError.value = ''
   try {
     await axios.post(`${SENSOR_API}/add`, { uid: currentUser.uid, sensorId: newSensorId.value.trim() })
-    sensors.value.push({ sensorId: newSensorId.value.trim(), name: newSensorId.value.trim(), type: '', location: '', editing: true })
+    sensors.value.push({ sensorId: newSensorId.value.trim(), name: newSensorId.value.trim(), type: '', location: '', editing: true, tmpName: newSensorId.value.trim(), tmpTypes: [], tmpLocation: '', _origName: newSensorId.value.trim(), _origType: '', _origLocation: '' })
     newSensorId.value = ''
-  } catch (e) { errorMessage.value = e?.response?.data?.error || 'Could not add sensor.' }
+  } catch (e) {
+    const status = e?.response?.status
+    if (status === 404) addSensorError.value = 'Add endpoint not found (HTTP 404) — backend needs to be deployed.'
+    else addSensorError.value = e?.response?.data?.error || `Could not add sensor (HTTP ${status || 'network error'}).`
+  }
   finally { addingSensor.value = false }
 }
 
@@ -453,7 +474,12 @@ async function logOut() {
                 </div>
                 <div class="form-group">
                   <label>Type</label>
-                  <input v-model="sensor.tmpType" type="text" class="form-input" placeholder="e.g. Temperature / Humidity / CO₂" maxlength="100"/>
+                  <div class="sensor-type-checks">
+                    <label v-for="t in SENSOR_TYPES" :key="t" class="type-check-label">
+                      <input type="checkbox" :value="t" v-model="sensor.tmpTypes" class="type-check-input"/>
+                      {{ t }}
+                    </label>
+                  </div>
                 </div>
                 <div class="form-group">
                   <label>Location</label>
@@ -471,10 +497,11 @@ async function logOut() {
             <!-- Add new sensor -->
             <div class="sensor-add-row">
               <input v-model="newSensorId" type="text" class="form-input" placeholder="Sensor ID (e.g. pi-sensor-02)" maxlength="128"/>
-              <button class="btn btn-secondary" :disabled="addingSensor || !newSensorId.trim()" @click="addSensor">
+              <button class="btn btn-add-sensor" :disabled="addingSensor || !newSensorId.trim()" @click="addSensor">
                 {{ addingSensor ? 'Adding...' : '+ Add Sensor' }}
               </button>
             </div>
+            <p v-if="addSensorError" class="add-sensor-error">{{ addSensorError }}</p>
           </template>
         </div>
 
@@ -828,7 +855,29 @@ async function logOut() {
 .btn-edit:hover { background: rgba(88,166,255,0.2); }
 .btn-delete { background: rgba(244,67,54,0.1); border-color: rgba(244,67,54,0.3); color: #f44336; }
 .btn-delete:hover { background: rgba(244,67,54,0.2); }
+.sensor-type-checks { display: flex; gap: 1.25rem; flex-wrap: wrap; padding: 8px 0; }
+.type-check-label { display: flex; align-items: center; gap: 6px; color: #c9d1d9; font-size: 0.9rem; cursor: pointer; }
+.type-check-input { width: 16px; height: 16px; accent-color: #4CAF50; cursor: pointer; }
 .sensor-edit-btns { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
 .sensor-add-row { display: flex; gap: 0.75rem; margin-top: 1rem; }
 .sensor-add-row .form-input { flex: 1; margin-bottom: 0; }
+.btn-add-sensor {
+  padding: 0.75rem 1.25rem;
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.5);
+  color: #4CAF50;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+.btn-add-sensor:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.25);
+  border-color: #4CAF50;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.2);
+}
+.btn-add-sensor:disabled { opacity: 0.4; cursor: not-allowed; }
+.add-sensor-error { color: #f44336; font-size: 0.82rem; margin-top: 6px; }
 </style>
