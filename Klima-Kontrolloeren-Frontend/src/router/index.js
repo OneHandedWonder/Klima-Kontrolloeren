@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { onAuthStateChanged } from 'firebase/auth'
 import KlimaDashboard from '../components/KlimaDashboard.vue'
 import SignInBoard from '../components/SignInBoard.vue'
+import ProfilePage from '../components/ProfilePage.vue'
 import { firebaseAuth } from '../firebase'
 
 const routes = [
@@ -19,6 +20,12 @@ const routes = [
     path: '/dashboard',
     name: 'dashboard',
     component: KlimaDashboard,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: ProfilePage,
     meta: { requiresAuth: true }
   }
 ]
