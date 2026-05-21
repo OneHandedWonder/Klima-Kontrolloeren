@@ -50,6 +50,50 @@ public class SensorController : ControllerBase
         return Ok(response);
     }
 
+    // GET api/sensor/info?uid=X&sensorId=Y
+    [EnableRateLimiting("sensor-read")]
+    [HttpGet("info")]
+    public async Task<IActionResult> GetSensorInfo([FromQuery] string uid, [FromQuery] string sensorId)
+    {
+        if (string.IsNullOrWhiteSpace(uid) || string.IsNullOrWhiteSpace(sensorId))
+            return BadRequest(new { error = "uid and sensorId are required." });
+        var info = await _sensorService.GetSensorInfoAsync(uid, sensorId);
+        return Ok(info ?? new SensorInfoResult { SensorId = sensorId, Name = sensorId });
+    }
+
+    // PUT api/sensor/info  ← save name / type / location
+    [EnableRateLimiting("sensor-read")]
+    [HttpPut("info")]
+    public async Task<IActionResult> UpdateSensorInfo([FromBody] UpdateSensorInfoRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Uid) || string.IsNullOrWhiteSpace(req.SensorId))
+            return BadRequest(new { error = "uid and sensorId are required." });
+        await _sensorService.UpdateSensorInfoAsync(req.Uid, req.SensorId, req.Name, req.Type, req.Location);
+        return Ok(new { message = "Sensor info saved." });
+    }
+
+    // POST api/sensor/add  ← add a sensor ID to the user's profile
+    [EnableRateLimiting("sensor-read")]
+    [HttpPost("add")]
+    public async Task<IActionResult> AddSensor([FromBody] AddSensorRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Uid) || string.IsNullOrWhiteSpace(req.SensorId))
+            return BadRequest(new { error = "uid and sensorId are required." });
+        await _sensorService.AddSensorToUserAsync(req.Uid, req.SensorId);
+        return Ok(new { message = $"Sensor '{req.SensorId}' added." });
+    }
+
+    // DELETE api/sensor/remove?uid=X&sensorId=Y  ← remove a sensor from the user's profile
+    [EnableRateLimiting("sensor-read")]
+    [HttpDelete("remove")]
+    public async Task<IActionResult> RemoveSensor([FromQuery] string uid, [FromQuery] string sensorId)
+    {
+        if (string.IsNullOrWhiteSpace(uid) || string.IsNullOrWhiteSpace(sensorId))
+            return BadRequest(new { error = "uid and sensorId are required." });
+        await _sensorService.RemoveSensorFromUserAsync(uid, sensorId);
+        return Ok(new { message = $"Sensor '{sensorId}' removed." });
+    }
+
     private static string[] ParseSensorsArray(string sensorsString)
     {
         if (string.IsNullOrWhiteSpace(sensorsString))

@@ -16,4 +16,8 @@ public interface ISensorService
     Task<List<SensorReading>> GetMonthlyReadingsAsync();
     Task<List<SensorReading>> GetMonthlyReadingsAsync(string uid);
     Task<List<KlimaDataUser>> GetUserSensorsAsync(string uid);
+    Task<SensorInfoResult?> GetSensorInfoAsync(string uid, string sensorId);
+    Task UpdateSensorInfoAsync(string uid, string sensorId, string name, string type, string location);
+    Task AddSensorToUserAsync(string uid, string sensorId);
+    Task RemoveSensorFromUserAsync(string uid, string sensorId);
 }

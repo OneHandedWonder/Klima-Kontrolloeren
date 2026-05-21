@@ -3,12 +3,23 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 import { firebaseAuth } from '../firebase'
+import axios from 'axios'
+
+const SENSOR_API = 'https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor'
 
 const router = useRouter()
 const currentUser = firebaseAuth.currentUser
 
 // Form state
-const activeTab = ref('email') // 'email' or 'password'
+const activeTab = ref('email') // 'email', 'password', or 'sensors'
+
+// ── Sensor state ──────────────────────────────────────────────
+const sensors = ref([])          // [{ sensorId, name, type, location, editing, tmpName, tmpType, tmpLocation }]
+const sensorsLoading = ref(false)
+const sensorsError = ref('')
+const sensorsSaving = ref(false)
+const newSensorId = ref('')
+const addingSensor = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -143,6 +154,104 @@ function mapFirebaseError(error) {
   return error?.message || 'An error occurred. Please try again.'
 }
 
+// ── Sensor functions ──────────────────────────────────────────
+async function loadSensors() {
+  if (!currentUser) return
+  sensorsLoading.value = true
+  sensorsError.value = ''
+  try {
+    const uid = currentUser.uid
+    const res = await axios.get(SENSOR_API, { params: { uid } })
+    const ids = res.data?.[0]?.sensors || []
+    const entries = await Promise.all(ids.map(async id => {
+      const r = await axios.get(`${SENSOR_API}/info`, { params: { uid, sensorId: id } }).catch(() => null)
+      return { sensorId: id, name: r?.data?.name || id, type: r?.data?.type || '', location: r?.data?.location || '', editing: false }
+    }))
+    sensors.value = entries
+  } catch {
+    sensorsError.value = 'Could not load sensors. Please try again.'
+  } finally {
+    sensorsLoading.value = false
+  }
+}
+
+function startEdit(sensor) {
+  // Copy current values into temps so Cancel can truly revert
+  sensor.tmpName = sensor.name
+  sensor.tmpType = sensor.type
+  sensor.tmpLocation = sensor.location
+  sensor.editing = true
+}
+
+function cancelEdit(sensor) {
+  // Restore originals — nothing actually changed
+  sensor.name = sensor.tmpName
+  sensor.type = sensor.tmpType
+  sensor.location = sensor.tmpLocation
+  sensor.editing = false
+}
+
+async function saveEdit(sensor) {
+  sensorsSaving.value = true
+  errorMessage.value = ''
+  try {
+    await axios.put(`${SENSOR_API}/info`, {
+      uid: currentUser.uid,
+      sensorId: sensor.sensorId,
+      name: sensor.tmpName.trim() || sensor.sensorId,
+      type: sensor.tmpType.trim(),
+      location: sensor.tmpLocation.trim()
+    })
+    // Commit temps to real values only on success
+    sensor.name = sensor.tmpName.trim() || sensor.sensorId
+    sensor.type = sensor.tmpType.trim()
+    sensor.location = sensor.tmpLocation.trim()
+    sensor.editing = false
+    successMessage.value = 'Sensor info saved.'
+    setTimeout(() => { successMessage.value = '' }, 3000)
+  } catch (e) {
+    const status = e?.response?.status
+    const detail = e?.response?.data?.error || e?.response?.data?.message || ''
+    if (status === 404) errorMessage.value = 'Save endpoint not found on the server (HTTP 404) — the new backend code needs to be deployed.'
+    else if (status === 500) errorMessage.value = `Server error — the SensorInfo database table may not exist yet. Run the CREATE TABLE SQL. ${detail}`
+    else if (!status) errorMessage.value = 'Network error — check browser console (F12) for details.'
+    else errorMessage.value = `Could not save (HTTP ${status}). ${detail || 'Please try again.'}`
+    // Revert to originals on failure
+    sensor.name = sensor.tmpName
+    sensor.type = sensor.tmpType
+    sensor.location = sensor.tmpLocation
+  } finally { sensorsSaving.value = false }
+}
+
+async function addSensor() {
+  if (!newSensorId.value.trim()) return
+  addingSensor.value = true
+  try {
+    await axios.post(`${SENSOR_API}/add`, { uid: currentUser.uid, sensorId: newSensorId.value.trim() })
+    sensors.value.push({ sensorId: newSensorId.value.trim(), name: newSensorId.value.trim(), type: '', location: '', editing: true })
+    newSensorId.value = ''
+  } catch (e) { errorMessage.value = e?.response?.data?.error || 'Could not add sensor.' }
+  finally { addingSensor.value = false }
+}
+
+async function removeSensor(sensorId) {
+  if (!confirm(`Remove sensor "${sensorId}" from your profile?`)) return
+  // Remove from UI immediately
+  sensors.value = sensors.value.filter(s => s.sensorId !== sensorId)
+  successMessage.value = 'Sensor removed.'
+  setTimeout(() => { successMessage.value = '' }, 3000)
+  // Save to localStorage so dashboard also hides it (works without backend deployment)
+  try {
+    const key = `klima:hidden:${currentUser.uid}`
+    const hidden = JSON.parse(localStorage.getItem(key) || '[]')
+    if (!hidden.includes(sensorId)) { hidden.push(sensorId); localStorage.setItem(key, JSON.stringify(hidden)) }
+  } catch { /* ignore */ }
+  // Also call backend (works once deployed to Azure)
+  axios.delete(`${SENSOR_API}/remove`, { params: { uid: currentUser.uid, sensorId } }).catch(() => {})
+}
+
+function switchToSensors() { activeTab.value = 'sensors'; clearMessages(); loadSensors() }
+
 async function logOut() {
   try {
     await firebaseAuth.signOut()
@@ -190,6 +299,13 @@ async function logOut() {
             @click="switchTab('password')"
           >
             Change Password
+          </button>
+          <button
+            class="tab-button"
+            :class="{ active: activeTab === 'sensors' }"
+            @click="switchToSensors"
+          >
+            My Sensors
           </button>
         </div>
 
@@ -298,6 +414,70 @@ async function logOut() {
             {{ loading ? 'Updating...' : 'Update Password' }}
           </button>
         </form>
+
+        <!-- ── My Sensors Tab ── -->
+        <div v-if="activeTab === 'sensors'" class="sensors-section">
+          <p class="sensors-desc">Add sensors to your profile, name them, and describe where they are placed.</p>
+
+          <div v-if="sensorsLoading" class="sensors-loading">Loading sensors...</div>
+          <div v-else-if="sensorsError" class="message error-message">{{ sensorsError }}</div>
+
+          <template v-else>
+            <!-- Sensor list -->
+            <div v-if="sensors.length === 0" class="sensors-empty">No sensors yet. Add one below.</div>
+
+            <div v-for="sensor in sensors" :key="sensor.sensorId" class="sensor-card">
+              <!-- View mode -->
+              <template v-if="!sensor.editing">
+                <div class="sensor-card-header">
+                  <div>
+                    <div class="sensor-card-name">{{ sensor.name }}</div>
+                    <div class="sensor-card-id">{{ sensor.sensorId }}</div>
+                    <div v-if="sensor.type || sensor.location" class="sensor-card-meta">
+                      <span v-if="sensor.type">🔬 {{ sensor.type }}</span>
+                      <span v-if="sensor.location">📍 {{ sensor.location }}</span>
+                    </div>
+                  </div>
+                  <div class="sensor-card-actions">
+                    <button class="btn-icon btn-edit" @click="startEdit(sensor)" title="Edit">✏️ Edit</button>
+                    <button class="btn-icon btn-delete" @click="removeSensor(sensor.sensorId)" title="Delete">🗑 Delete</button>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Edit mode -->
+              <template v-else>
+                <div class="form-group">
+                  <label>Name</label>
+                  <input v-model="sensor.tmpName" type="text" class="form-input" placeholder="e.g. Living Room Sensor" maxlength="60"/>
+                </div>
+                <div class="form-group">
+                  <label>Type</label>
+                  <input v-model="sensor.tmpType" type="text" class="form-input" placeholder="e.g. Temperature / Humidity / CO₂" maxlength="100"/>
+                </div>
+                <div class="form-group">
+                  <label>Location</label>
+                  <input v-model="sensor.tmpLocation" type="text" class="form-input" placeholder="e.g. Living Room, 1st floor" maxlength="100"/>
+                </div>
+                <div class="sensor-edit-btns">
+                  <button class="btn btn-primary" :disabled="sensorsSaving" @click="saveEdit(sensor)">
+                    {{ sensorsSaving ? 'Saving...' : 'Save' }}
+                  </button>
+                  <button class="btn btn-secondary" @click="cancelEdit(sensor)">Cancel</button>
+                </div>
+              </template>
+            </div>
+
+            <!-- Add new sensor -->
+            <div class="sensor-add-row">
+              <input v-model="newSensorId" type="text" class="form-input" placeholder="Sensor ID (e.g. pi-sensor-02)" maxlength="128"/>
+              <button class="btn btn-secondary" :disabled="addingSensor || !newSensorId.trim()" @click="addSensor">
+                {{ addingSensor ? 'Adding...' : '+ Add Sensor' }}
+              </button>
+            </div>
+          </template>
+        </div>
+
       </div>
 
       <!-- Logout Section -->
@@ -620,4 +800,35 @@ async function logOut() {
     font-size: 13px;
   }
 }
+
+/* ── Sensor tab styles ── */
+.sensors-desc { font-size: 0.9rem; color: #8b949e; margin-bottom: 1.25rem; }
+.sensors-loading, .sensors-empty { color: #8b949e; font-size: 0.9rem; padding: 0.75rem 0; }
+.sensor-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.85rem;
+}
+.sensor-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.sensor-card-name { font-size: 1rem; font-weight: 600; color: #c9d1d9; }
+.sensor-card-id { font-size: 0.72rem; color: #8b949e; font-family: monospace; margin-top: 2px; }
+.sensor-card-meta { display: flex; gap: 12px; margin-top: 6px; font-size: 0.82rem; color: #7fa8bf; }
+.sensor-card-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.btn-icon {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.2s;
+}
+.btn-edit { background: rgba(88,166,255,0.1); border-color: rgba(88,166,255,0.3); color: #58a6ff; }
+.btn-edit:hover { background: rgba(88,166,255,0.2); }
+.btn-delete { background: rgba(244,67,54,0.1); border-color: rgba(244,67,54,0.3); color: #f44336; }
+.btn-delete:hover { background: rgba(244,67,54,0.2); }
+.sensor-edit-btns { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+.sensor-add-row { display: flex; gap: 0.75rem; margin-top: 1rem; }
+.sensor-add-row .form-input { flex: 1; margin-bottom: 0; }
 </style>

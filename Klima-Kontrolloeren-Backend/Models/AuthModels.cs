@@ -46,3 +46,46 @@ public sealed class KlimaDataUser
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; }
 }
+
+// Sensor management models
+public sealed class SensorInfoResult
+{
+    [JsonPropertyName("sensorId")]
+    public string SensorId { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty;
+
+    [JsonPropertyName("location")]
+    public string Location { get; set; } = string.Empty;
+}
+
+public sealed class UpdateSensorInfoRequest
+{
+    [JsonPropertyName("uid")]
+    public string Uid { get; set; } = string.Empty;
+
+    [JsonPropertyName("sensorId")]
+    public string SensorId { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty;
+
+    [JsonPropertyName("location")]
+    public string Location { get; set; } = string.Empty;
+}
+
+public sealed class AddSensorRequest
+{
+    [JsonPropertyName("uid")]
+    public string Uid { get; set; } = string.Empty;
+
+    [JsonPropertyName("sensorId")]
+    public string SensorId { get; set; } = string.Empty;
+}

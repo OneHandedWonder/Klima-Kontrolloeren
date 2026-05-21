@@ -89,4 +89,16 @@ public class SensorService : ISensorService
     {
         return await _db.GetKlimaDataUserAsync(uid);
     }
+
+    public async Task<SensorInfoResult?> GetSensorInfoAsync(string uid, string sensorId)
+        => await _db.GetSensorInfoAsync(uid, sensorId);
+
+    public async Task UpdateSensorInfoAsync(string uid, string sensorId, string name, string type, string location)
+        => await _db.UpdateSensorInfoAsync(uid, sensorId, name, type, location);
+
+    public async Task AddSensorToUserAsync(string uid, string sensorId)
+        => await _db.AddSensorToUserAsync(uid, sensorId);
+
+    public async Task RemoveSensorFromUserAsync(string uid, string sensorId)
+        => await _db.RemoveSensorFromUserAsync(uid, sensorId);
 }

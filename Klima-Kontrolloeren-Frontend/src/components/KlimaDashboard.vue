@@ -208,6 +208,8 @@ async function initializeUser() {
   if (cachedUser) {
     userUID.value = cachedUser.uid
     userSensors.value = cachedUser.sensors || []
+    filterHidden()
+    if (!activeGraphSensor.value && userSensors.value.length) activeGraphSensor.value = userSensors.value[0]
     const isEnabled = await checkUserEnabled()
     if (!isEnabled) return false
 
@@ -257,6 +259,8 @@ async function initializeUser() {
       }
       
       userSensors.value = userData.sensors || []
+      filterHidden()
+      if (!activeGraphSensor.value && userSensors.value.length) activeGraphSensor.value = userSensors.value[0]
       writeCache(`user:${firebaseAuth.currentUser.uid}`, {
         uid: userUID.value,
         sensors: userSensors.value
@@ -476,6 +480,79 @@ const co2 = ref(null)
 const indoorLoading = ref(true)
 const sensorOnline = ref(null)
 
+// ── Multi-sensor ──────────────────────────────────────────────
+const SENSOR_API_BASE = 'https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor'
+const sensorData = ref({})   // { [sensorId]: { temperature, humidity, co2, online, loading } }
+const sensorInfo = ref({})   // { [sensorId]: { name, type, location } }
+const showAllSensors = ref(false)
+const activeGraphSensor = ref('')
+
+const sensorDataList = computed(() =>
+  userSensors.value.map(id => ({
+    sensorId: id,
+    name: sensorInfo.value[id]?.name || id,
+    type: sensorInfo.value[id]?.type || '',
+    location: sensorInfo.value[id]?.location || '',
+    temperature: sensorData.value[id]?.temperature ?? null,
+    humidity:    sensorData.value[id]?.humidity    ?? null,
+    co2:         sensorData.value[id]?.co2         ?? null,
+    online:      sensorData.value[id]?.online      ?? false,
+    loading:     sensorData.value[id]?.loading     ?? true
+  }))
+)
+
+const visibleSensors = computed(() =>
+  showAllSensors.value ? sensorDataList.value : sensorDataList.value.slice(0, 1)
+)
+
+// Status helpers (per-sensor, used in template)
+function getTempStatus(t) {
+  if (t === null) return 'no-data'
+  const { min, max, warning } = comfortSettings.value
+  if (t >= min && t <= max) return 'good'
+  if ((t >= min - warning && t < min) || (t > max && t <= max + warning)) return 'warning'
+  return 'bad'
+}
+function getHumidityStatus(h) {
+  if (h === null) return 'no-data'
+  const { min, max, warning } = comfortHumiditySettings.value
+  if (h >= min && h <= max) return 'good'
+  if ((h >= min - warning && h < min) || (h > max && h <= max + warning)) return 'warning'
+  return 'bad'
+}
+function getCo2Status(v) {
+  if (v === null) return 'no-data'
+  if (v < 800) return 'good'
+  if (v <= 1200) return 'warning'
+  return 'bad'
+}
+function getTempPos(t) {
+  if (t === null) return -1
+  const { min, max } = comfortSettings.value
+  return Math.min(100, Math.max(0, ((t - (min - 5)) / (max + 15)) * 100))
+}
+function getHumPos(h) { return h === null ? -1 : Math.min(100, Math.max(0, h)) }
+function getCo2Pos(v) { return v === null ? -1 : Math.min(100, Math.max(0, ((v - 300) / 1700) * 100)) }
+
+// Hidden-sensor filter (localStorage override until backend is deployed)
+function getHiddenSensors() {
+  try { return JSON.parse(localStorage.getItem(`klima:hidden:${userUID.value}`) || '[]') } catch { return [] }
+}
+function filterHidden() {
+  const hidden = getHiddenSensors()
+  if (hidden.length) userSensors.value = userSensors.value.filter(id => !hidden.includes(id))
+}
+
+async function fetchSensorInfo() {
+  if (!userUID.value || !userSensors.value.length) return
+  for (const sensorId of userSensors.value) {
+    try {
+      const res = await axios.get(`${SENSOR_API_BASE}/info`, { params: { uid: userUID.value, sensorId } })
+      if (res.data) sensorInfo.value[sensorId] = { name: res.data.name || sensorId, type: res.data.type || '', location: res.data.location || '' }
+    } catch { /* fallback to sensorId as name */ }
+  }
+}
+
 const outdoorTemp = ref(null)
 const outdoorHumidity = ref(null)
 const outdoorWind = ref(null)
@@ -567,55 +644,9 @@ function mapAverageSeries(rows, period, metricKey) {
   })
 }
 
-const tempStatus = computed(() => {
-  if (temperature.value === null) return 'no-data'
-  const t = temperature.value
-  const { min, max, warning } = comfortSettings.value
-  if (t >= min && t <= max) return 'good'
-  if ((t >= min - warning && t < min) || (t > max && t <= max + warning)) return 'warning'
-  return 'bad'
-})
-
-const humidityStatus = computed(() => {
-  if (humidity.value === null) return 'no-data'
-  const h = humidity.value
-  const { min, max, warning } = comfortHumiditySettings.value
-  if (h >= min && h <= max) return 'good'
-  if ((h >= min - warning && h < min) || (h > max && h <= max + warning)) return 'warning'
-  return 'bad'
-})
-
-const co2Status = computed(() => {
-  if (co2.value === null) return 'no-data'
-  if (co2.value < 800) return 'good'
-  if (co2.value <= 1200) return 'warning'
-  return 'bad'
-})
-
-const tempIndicatorPos = computed(() => {
-  if (temperature.value === null) return -1
-  const { min, max } = comfortSettings.value
-  const rangeMin = min - 5
-  const rangeMax = max + 10
-  const range = rangeMax - rangeMin
-  return Math.min(100, Math.max(0, ((temperature.value - rangeMin) / range) * 100))
-})
-
-const humidityIndicatorPos = computed(() => {
-  if (humidity.value === null) return -1
-  return Math.min(100, Math.max(0, humidity.value))
-})
-
-const co2IndicatorPos = computed(() => {
-  if (co2.value === null) return -1
-  return Math.min(100, Math.max(0, ((co2.value - 300) / 1700) * 100))
-})
-
 const currentGraphData = computed(() => graphData.value[activeMetric.value][activeGraph.value])
 const currentUnit = computed(() => graphData.value[activeMetric.value].unit)
 const weatherEmoji = computed(() => WMO_EMOJIS[weatherCode.value] || '🌡️')
-const sensorStatus = computed(() => (sensorOnline.value === null ? 'connecting' : (sensorOnline.value ? 'online' : 'offline')))
-const sensorStatusText = computed(() => (sensorOnline.value === null ? 'Connecting...' : (sensorOnline.value ? 'Sensor online' : 'Sensor offline')))
 const mainHoveredIndex = ref(-1)
 const pastHoveredIndex = ref(-1)
 
@@ -1020,50 +1051,49 @@ async function checkUserEnabled() {
 }
 
 function fetchData(force = false) {
-  const cacheKey = `sensor-data:${userUID.value || 'all'}`
-  const cached = force ? null : readCache(cacheKey, CACHE_TTL.sensorData)
-  if (cached) {
-    applySensorData(cached)
-    return
+  if (!userSensors.value.length) {
+    sensorOnline.value = false; indoorLoading.value = false; return
   }
+  userSensors.value.forEach(sensorId => {
+    if (!sensorData.value[sensorId])
+      sensorData.value[sensorId] = { loading: true, online: false, temperature: null, humidity: null, co2: null }
 
-  const endpoint = userUID.value ? `${API_BASE}?uid=${userUID.value}` : API_BASE
-  
-  axios.get(endpoint)
-    .then(response => {
-      console.log('Indoor sensor full response:', response.data)
-      // Handle array response — take the latest (first) reading
-      const data = Array.isArray(response.data) ? response.data[0] : response.data
-      writeCache(cacheKey, data)
-      applySensorData(data)
-    })
-    .catch(error => {
-      console.error('Indoor sensor fetch error:', error.message, error.response?.data)
-      sensorOnline.value = false
-      indoorLoading.value = false
-    })
+    const cacheKey = `sensor-data:${sensorId}`
+    const cached = force ? null : readCache(cacheKey, CACHE_TTL.sensorData)
+    if (cached) { applySensorData(sensorId, cached); return }
+
+    axios.get(`${API_BASE}?uid=${userUID.value}&sensorId=${sensorId}&limit=1`)
+      .then(res => {
+        const data = Array.isArray(res.data) ? res.data[0] : res.data
+        writeCache(cacheKey, data)
+        applySensorData(sensorId, data)
+      })
+      .catch(() => {
+        sensorData.value[sensorId] = { loading: false, online: false, temperature: null, humidity: null, co2: null }
+      })
+  })
 }
 
-function applySensorData(data) {
-  if (!data) {
-    sensorOnline.value = false
-    indoorLoading.value = false
-    return
+function applySensorData(sensorId, data) {
+  const reading = {
+    temperature: data?.temperature ?? null,
+    humidity:    data?.humidity    ?? null,
+    co2:         data?.cO2PPM      ?? null,
+    online:      !!data,
+    loading:     false
   }
-
-  console.log('Sensor data object keys:', Object.keys(data))
-  console.log('Sensor data object:', data)
-
-  temperature.value = data.temperature
-  humidity.value = data.humidity
-  // CO2 field is named cO2PPM in the API
-  co2.value = data.cO2PPM || null
-
-  sensorOnline.value = true
-  indoorLoading.value = false
-  lastUpdated.value = new Date().toLocaleTimeString()
-  justUpdated.value = true
-  setTimeout(() => { justUpdated.value = false }, 2000)
+  sensorData.value[sensorId] = reading
+  // Keep global refs in sync with first sensor (for climate action status)
+  if (userSensors.value[0] === sensorId) {
+    temperature.value = reading.temperature
+    humidity.value    = reading.humidity
+    co2.value         = reading.co2
+    sensorOnline.value = reading.online
+    indoorLoading.value = false
+    lastUpdated.value = new Date().toLocaleTimeString()
+    justUpdated.value = true
+    setTimeout(() => { justUpdated.value = false }, 2000)
+  }
 }
 
 function fetchWeather(force = false) {
@@ -1210,6 +1240,7 @@ function applyWeatherData(weatherData) {
 }
 
 function fetchAll(force = false) {
+  fetchSensorInfo()
   fetchData(force)
   fetchWeather(force)
   fetchAverageData(force)
@@ -1229,17 +1260,6 @@ onMounted(() => {
     enabledCheckInterval = setInterval(checkUserEnabled, ENABLED_CHECK_INTERVAL_MS)
   })
 })
-
-async function signOut() {
-  try {
-    if (firebaseAuth) {
-      await firebaseAuth.signOut()
-      router.push('/signin')
-    }
-  } catch (error) {
-    console.error('Sign out error:', error)
-  }
-}
 
 onBeforeUnmount(() => {
   clearInterval(refreshInterval)
@@ -1269,91 +1289,101 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <!-- Indoor main display (template body adapted from legacy HTML) -->
-    <div class="indoor-section">
-      <h2 class="indoor-title">Indoor Sensor Data</h2>
-      <div class="sensor-status">
-        <span :class="['status-dot', sensorStatus]"></span>
-        <span class="status-text">{{ sensorStatusText }}</span>
+    <!-- One section per sensor -->
+    <div v-for="sensor in visibleSensors" :key="sensor.sensorId" class="indoor-section">
+      <h2 class="indoor-title">{{ sensor.name }}</h2>
+      <div v-if="sensor.location || sensor.type" class="sensor-meta">
+        <span v-if="sensor.location" class="sensor-meta-item">📍 {{ sensor.location }}</span>
+        <span v-if="sensor.type" class="sensor-meta-item">🔬 {{ sensor.type }}</span>
       </div>
-      <div :class="['indoor-metrics', { loading: indoorLoading }]">
-        <!-- Temperature tile -->
+      <div class="sensor-status">
+        <span :class="['status-dot', sensor.loading ? 'connecting' : sensor.online ? 'online' : 'offline']"></span>
+        <span class="status-text">{{ sensor.loading ? 'Connecting...' : sensor.online ? 'Sensor Online' : 'Sensor Offline' }}</span>
+      </div>
+      <div :class="['indoor-metrics', { loading: sensor.loading }]">
+
+        <!-- Temperature -->
         <div class="metric-tile">
           <div class="metric-header">
             <span class="metric-label">Temperature</span>
-            <span class="info-wrap">
-              <span class="info-icon">i</span>
+            <span class="info-wrap"><span class="info-icon">i</span>
               <div class="info-tooltip">
                 <strong>Temperature</strong>
                 <p>Indoor air temperature measured by the Pi sensor.</p>
-                <div class="tooltip-range good">● Good — {{ comfortSettings.min }}–{{ comfortSettings.max }}°C: Comfortable room temperature</div>
-                <div class="tooltip-range warning">● Warning — {{ comfortSettings.min - comfortSettings.warning }}–{{ comfortSettings.min }}°C or {{ comfortSettings.max }}–{{ comfortSettings.max + comfortSettings.warning }}°C: Slightly cold or warm</div>
-                <div class="tooltip-range bad">● Poor — below {{ comfortSettings.min - comfortSettings.warning }}°C or above {{ comfortSettings.max + comfortSettings.warning }}°C: Too cold or too hot</div>
+                <div class="tooltip-range good">● Good — {{ comfortSettings.min }}–{{ comfortSettings.max }}°C</div>
+                <div class="tooltip-range warning">● Warning — {{ comfortSettings.min - comfortSettings.warning }}–{{ comfortSettings.min }}°C or {{ comfortSettings.max }}–{{ comfortSettings.max + comfortSettings.warning }}°C</div>
+                <div class="tooltip-range bad">● Poor — below {{ comfortSettings.min - comfortSettings.warning }}°C or above {{ comfortSettings.max + comfortSettings.warning }}°C</div>
               </div>
             </span>
           </div>
-          <span :class="['metric-value', tempStatus]">{{ temperature !== null ? temperature : '—' }}<span class="metric-unit">°C</span></span>
+          <span :class="['metric-value', getTempStatus(sensor.temperature)]">{{ sensor.temperature !== null ? sensor.temperature : '—' }}<span class="metric-unit">°C</span></span>
           <div class="status-scale">
             <div class="scale-bar" :style="{ background: tempScaleGradient }">
-              <span v-if="tempIndicatorPos >= 0" class="scale-indicator" :style="{ left: tempIndicatorPos + '%' }"></span>
+              <span v-if="getTempPos(sensor.temperature) >= 0" class="scale-indicator" :style="{ left: getTempPos(sensor.temperature) + '%' }"></span>
             </div>
             <div class="scale-range-labels"><span>{{ comfortSettings.min - 5 }}°C</span><span>{{ tempScaleRangeLabel }}</span><span>{{ comfortSettings.max + 10 }}°C</span></div>
-            <span v-if="tempStatus !== 'no-data'" :class="['status-badge', tempStatus]">{{ statusText(tempStatus) }}</span>
+            <span v-if="getTempStatus(sensor.temperature) !== 'no-data'" :class="['status-badge', getTempStatus(sensor.temperature)]">{{ statusText(getTempStatus(sensor.temperature)) }}</span>
           </div>
-          <button class="settings-btn" @click="openSettingsModal" title="Adjust temperature preferences">⚙️ Adjust Preferences</button>
+          <button class="settings-btn" @click="openSettingsModal">⚙️ Adjust Preferences</button>
         </div>
 
-        <!-- Humidity tile -->
+        <!-- Humidity -->
         <div class="metric-tile">
           <div class="metric-header">
             <span class="metric-label">Humidity</span>
-            <span class="info-wrap">
-              <span class="info-icon">i</span>
+            <span class="info-wrap"><span class="info-icon">i</span>
               <div class="info-tooltip">
                 <strong>Humidity</strong>
                 <p>Relative indoor humidity measured by the Pi sensor.</p>
                 <div class="tooltip-range good">● Good — 40–60%: Ideal for health &amp; comfort</div>
-                <div class="tooltip-range warning">● Warning — 30–40% or 60–70%: Getting dry or humid</div>
-                <div class="tooltip-range bad">● Poor — below 30% or above 70%: Risk of dryness or mould</div>
+                <div class="tooltip-range warning">● Warning — 30–40% or 60–70%</div>
+                <div class="tooltip-range bad">● Poor — below 30% or above 70%</div>
               </div>
             </span>
           </div>
-          <span :class="['metric-value', humidityStatus]">{{ humidity !== null ? humidity : '—' }}<span class="metric-unit">%</span></span>
+          <span :class="['metric-value', getHumidityStatus(sensor.humidity)]">{{ sensor.humidity !== null ? sensor.humidity : '—' }}<span class="metric-unit">%</span></span>
           <div class="status-scale">
             <div class="scale-bar" :style="{ background: humidityScaleGradient }">
-              <span v-if="humidityIndicatorPos >= 0" class="scale-indicator" :style="{ left: humidityIndicatorPos + '%' }"></span>
+              <span v-if="getHumPos(sensor.humidity) >= 0" class="scale-indicator" :style="{ left: getHumPos(sensor.humidity) + '%' }"></span>
             </div>
             <div class="scale-range-labels"><span>0%</span><span>{{ comfortHumiditySettings.min }}–{{ comfortHumiditySettings.max }}%</span><span>100%</span></div>
-            <span v-if="humidityStatus !== 'no-data'" :class="['status-badge', humidityStatus]">{{ statusText(humidityStatus) }}</span>
+            <span v-if="getHumidityStatus(sensor.humidity) !== 'no-data'" :class="['status-badge', getHumidityStatus(sensor.humidity)]">{{ statusText(getHumidityStatus(sensor.humidity)) }}</span>
           </div>
-          <button class="settings-btn" @click="openHumiditySettingsModal" title="Adjust humidity preferences">⚙️ Adjust Preferences</button>
+          <button class="settings-btn" @click="openHumiditySettingsModal">⚙️ Adjust Preferences</button>
         </div>
 
-        <!-- CO2 tile -->
+        <!-- CO₂ -->
         <div class="metric-tile">
           <div class="metric-header">
             <span class="metric-label">CO₂</span>
-            <span class="info-wrap">
-              <span class="info-icon">i</span>
+            <span class="info-wrap"><span class="info-icon">i</span>
               <div class="info-tooltip">
                 <strong>CO₂</strong>
                 <p>Carbon dioxide concentration measured by the Pi sensor.</p>
-                <div class="tooltip-range good">● Good — below 800 ppm: Fresh, excellent air quality</div>
-                <div class="tooltip-range warning">● Warning — 800–1200 ppm: Acceptable, ventilate soon</div>
-                <div class="tooltip-range bad">● Poor — above 1200 ppm: Bad air quality, open a window!</div>
+                <div class="tooltip-range good">● Good — below 800 ppm</div>
+                <div class="tooltip-range warning">● Warning — 800–1200 ppm</div>
+                <div class="tooltip-range bad">● Poor — above 1200 ppm</div>
               </div>
             </span>
           </div>
-          <span :class="['metric-value', co2Status]">{{ co2 !== null ? co2 : '—' }}<span class="metric-unit">ppm</span></span>
+          <span :class="['metric-value', getCo2Status(sensor.co2)]">{{ sensor.co2 !== null ? sensor.co2 : '—' }}<span class="metric-unit">ppm</span></span>
           <div class="status-scale">
             <div class="scale-bar" style="background: linear-gradient(to right, #4CAF50 0%, #4CAF50 29%, #FF9800 29%, #FF9800 53%, #f44336 53%, #f44336 100%);">
-              <span v-if="co2IndicatorPos >= 0" class="scale-indicator" :style="{ left: co2IndicatorPos + '%' }"></span>
+              <span v-if="getCo2Pos(sensor.co2) >= 0" class="scale-indicator" :style="{ left: getCo2Pos(sensor.co2) + '%' }"></span>
             </div>
             <div class="scale-range-labels"><span>300</span><span>&lt;800 ppm</span><span>2000</span></div>
-            <span v-if="co2Status !== 'no-data'" :class="['status-badge', co2Status]">{{ statusText(co2Status) }}</span>
+            <span v-if="getCo2Status(sensor.co2) !== 'no-data'" :class="['status-badge', getCo2Status(sensor.co2)]">{{ statusText(getCo2Status(sensor.co2)) }}</span>
           </div>
         </div>
+
       </div>
+    </div>
+
+    <!-- Show more / less toggle (only when user has multiple sensors) -->
+    <div v-if="sensorDataList.length > 1" class="sensor-toggle-row">
+      <button class="sensor-toggle-btn" @click="showAllSensors = !showAllSensors">
+        {{ showAllSensors ? '▲ Show less' : `▼ Show all sensors (${sensorDataList.length})` }}
+      </button>
     </div>
 
     <!-- System feedback bar -->
@@ -1474,7 +1504,18 @@ onBeforeUnmount(() => {
 
       <div class="dashboard-card graphs-card">
         <h3>Graphs</h3>
-        <p class="subtitle">Historical graphs</p>
+        <p class="subtitle">Historical indoor sensor graphs</p>
+
+        <!-- Sensor picker — only shown when user has more than one sensor -->
+        <div v-if="sensorDataList.length > 1" class="graph-metric-btns">
+          <button
+            v-for="s in sensorDataList" :key="s.sensorId"
+            :class="['metric-graph-btn', { active: activeGraphSensor === s.sensorId }]"
+            @click="activeGraphSensor = s.sensorId; fetchAverageData(true)">
+            {{ s.name }}
+          </button>
+        </div>
+
         <div class="graph-metric-btns">
           <button @click="activeMetric = 'temperature'" :class="['metric-graph-btn', { active: activeMetric === 'temperature' }]">Temperature</button>
           <button @click="activeMetric = 'humidity'" :class="['metric-graph-btn', { active: activeMetric === 'humidity' }]">Humidity</button>

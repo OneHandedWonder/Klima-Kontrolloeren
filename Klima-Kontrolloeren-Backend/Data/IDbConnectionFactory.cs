@@ -17,4 +17,10 @@ public interface IDbConnectionFactory
     Task<List<AverageData>> GetMonthlyAveragesAsync();
     Task<List<SensorReading>> GetMonthlyReadingsAsync();
     Task<List<SensorReading>> GetMonthlyReadingsAsync(string uid);
+    // Sensor info (name / type / location)
+    Task<SensorInfoResult?> GetSensorInfoAsync(string uid, string sensorId);
+    Task UpdateSensorInfoAsync(string uid, string sensorId, string name, string type, string location);
+    // Add / remove sensor from user profile
+    Task AddSensorToUserAsync(string uid, string sensorId);
+    Task RemoveSensorFromUserAsync(string uid, string sensorId);
 }
