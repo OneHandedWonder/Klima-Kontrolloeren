@@ -1,14 +1,15 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 import { firebaseAuth } from '../firebase'
+import axios from 'axios'
 
 const router = useRouter()
 const currentUser = firebaseAuth.currentUser
 
 // Form state
-const activeTab = ref('email') // 'email' or 'password'
+const activeTab = ref('email') // 'email', 'password', or 'sensors'
 const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -22,7 +23,10 @@ const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 
-// Validation
+// Sensor management
+const sensors = ref([])
+const newSensorId = ref('')
+const sensorsLoading = ref(false)
 const emailValidation = computed(() => {
   if (!newEmail.value) return { valid: true, message: '' }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -152,6 +156,64 @@ async function logOut() {
     errorMessage.value = 'Failed to sign out. Please try again.'
   }
 }
+
+// Sensor management functions
+onMounted(async () => {
+  if (activeTab.value === 'sensors') {
+    await loadUserSensors()
+  }
+})
+
+async function loadUserSensors() {
+  sensorsLoading.value = true
+  try {
+    const token = await currentUser.getIdToken()
+    const response = await axios.get(
+      'https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor/user',
+      {
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    )
+    sensors.value = response.data.sensors || []
+  } catch (error) {
+    console.error('Failed to load sensors:', error)
+    errorMessage.value = 'Failed to load sensors'
+  } finally {
+    sensorsLoading.value = false
+  }
+}
+
+async function addSensor() {
+  if (!newSensorId.value.trim()) {
+    errorMessage.value = 'Please enter a sensor ID'
+    return
+  }
+
+  try {
+    const token = await currentUser.getIdToken()
+    // TODO: Send to backend
+    sensors.value.push(newSensorId.value)
+    successMessage.value = 'Sensor added successfully'
+    newSensorId.value = ''
+  } catch (error) {
+    console.error('Failed to add sensor:', error)
+    errorMessage.value = 'Failed to add sensor'
+  }
+}
+
+async function removeSensor(sensorId) {
+  if (!confirm(`Are you sure you want to remove sensor ${sensorId}?`)) return
+
+  try {
+    const token = await currentUser.getIdToken()
+    // TODO: Send to backend
+    sensors.value = sensors.value.filter(s => s !== sensorId)
+    successMessage.value = 'Sensor removed successfully'
+  } catch (error) {
+    console.error('Failed to remove sensor:', error)
+    errorMessage.value = 'Failed to remove sensor'
+  }
+}
 </script>
 
 <template>
@@ -190,6 +252,13 @@ async function logOut() {
             @click="switchTab('password')"
           >
             Change Password
+          </button>
+          <button
+            class="tab-button"
+            :class="{ active: activeTab === 'sensors' }"
+            @click="switchTab('sensors')"
+          >
+            Manage Sensors
           </button>
         </div>
 
@@ -298,6 +367,51 @@ async function logOut() {
             {{ loading ? 'Updating...' : 'Update Password' }}
           </button>
         </form>
+
+        <!-- Manage Sensors Form -->
+        <div v-if="activeTab === 'sensors'" class="sensors-section">
+          <div class="form-group">
+            <label>Your Sensors</label>
+            <div v-if="sensorsLoading" class="loading-message">Loading sensors...</div>
+            <div v-else-if="sensors.length === 0" class="no-sensors-message">
+              No sensors added yet. Add your first sensor below.
+            </div>
+            <div v-else class="sensors-list">
+              <div v-for="sensor in sensors" :key="sensor" class="sensor-item">
+                <span class="sensor-name">{{ sensor }}</span>
+                <button
+                  type="button"
+                  class="btn-remove"
+                  @click="removeSensor(sensor)"
+                  title="Remove sensor"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="new-sensor-id">Add New Sensor <span class="required">*</span></label>
+            <div class="add-sensor-form">
+              <input
+                id="new-sensor-id"
+                v-model="newSensorId"
+                type="text"
+                placeholder="Enter sensor ID"
+                class="form-input"
+              />
+              <button
+                type="button"
+                class="btn btn-add-sensor"
+                @click="addSensor"
+                :disabled="!newSensorId.trim()"
+              >
+                Add Sensor
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Logout Section -->
@@ -602,6 +716,102 @@ async function logOut() {
   margin-top: 12px;
 }
 
+/* Sensors Section */
+.sensors-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.loading-message {
+  text-align: center;
+  color: #a0c4d4;
+  font-size: 14px;
+  padding: 20px;
+}
+
+.no-sensors-message {
+  text-align: center;
+  color: #a0c4d4;
+  font-size: 14px;
+  padding: 20px;
+  background: rgba(160, 196, 212, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(160, 196, 212, 0.1);
+}
+
+.sensors-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sensor-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(76, 175, 80, 0.08);
+  border: 1px solid rgba(76, 175, 80, 0.2);
+  border-radius: 8px;
+}
+
+.sensor-name {
+  color: #cfe8f7;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-remove {
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  color: #ffb3ae;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.btn-remove:hover {
+  background: rgba(244, 67, 54, 0.3);
+  border-color: rgba(244, 67, 54, 0.5);
+  color: #ffffff;
+}
+
+.add-sensor-form {
+  display: flex;
+  gap: 10px;
+}
+
+.add-sensor-form .form-input {
+  flex: 1;
+}
+
+.btn-add-sensor {
+  background: rgba(76, 175, 80, 0.2);
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  color: #a8d5b8;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.btn-add-sensor:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.35);
+  border-color: #4CAF50;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(76, 175, 80, 0.3);
+}
+
+.btn-add-sensor:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 600px) {
   .profile-card {
     padding: 24px 16px;
@@ -618,6 +828,10 @@ async function logOut() {
   .tab-button {
     padding: 10px 12px;
     font-size: 13px;
+  }
+
+  .add-sensor-form {
+    flex-direction: column;
   }
 }
 </style>
