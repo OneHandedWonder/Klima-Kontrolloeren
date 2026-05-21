@@ -1,24 +1,17 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, signOut } from 'firebase/auth'
-import axios from 'axios'
+import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 import { firebaseAuth } from '../firebase'
 
 const router = useRouter()
 const currentUser = firebaseAuth.currentUser
 
 // Form state
-const activeTab = ref('email') // 'email', 'password', or 'sensors'
+const activeTab = ref('email') // 'email' or 'password'
 const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
-
-// Sensors management
-const userSensors = ref([])
-const sensorsLoading = ref(true)
-const newSensorId = ref('')
-const userUID = ref(null)
 
 // Email change form
 const newEmail = ref('')
@@ -67,97 +60,6 @@ function resetForms() {
   currentPassword.value = ''
   newPassword.value = ''
   confirmPassword.value = ''
-  newSensorId.value = ''
-}
-
-// Load user's sensors
-async function loadUserSensors() {
-  sensorsLoading.value = true
-  clearMessages()
-  
-  try {
-    const idToken = await firebaseAuth.currentUser.getIdToken()
-    const response = await axios.get(
-      `https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/auth/getUserUID`,
-      { params: { token: idToken } }
-    )
-    
-    userUID.value = response.data.uid
-    
-    // Fetch user's sensors
-    const sensorResponse = await axios.get(
-      `https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor`,
-      { params: { uid: userUID.value } }
-    )
-    
-    if (Array.isArray(sensorResponse.data) && sensorResponse.data.length > 0) {
-      userSensors.value = sensorResponse.data[0].sensors || []
-    }
-  } catch (error) {
-    console.error('Failed to load sensors:', error)
-    errorMessage.value = 'Failed to load sensors'
-  } finally {
-    sensorsLoading.value = false
-  }
-}
-
-async function addSensor() {
-  clearMessages()
-  
-  if (!newSensorId.value.trim()) {
-    errorMessage.value = 'Please enter a sensor ID'
-    return
-  }
-  
-  if (userSensors.value.includes(newSensorId.value.trim())) {
-    errorMessage.value = 'This sensor ID is already added'
-    return
-  }
-  
-  loading.value = true
-  
-  try {
-    // Add sensor to local list
-    userSensors.value.push(newSensorId.value.trim())
-    
-    // Here you would send the update to your backend
-    // For now, we'll just update locally and show success
-    successMessage.value = `Sensor "${newSensorId.value.trim()}" added successfully!`
-    newSensorId.value = ''
-    
-    // TODO: Send update to backend API endpoint
-  } catch (error) {
-    errorMessage.value = 'Failed to add sensor'
-    userSensors.value.pop()
-  } finally {
-    loading.value = false
-  }
-}
-
-async function removeSensor(sensorId) {
-  clearMessages()
-  
-  if (!confirm(`Are you sure you want to remove sensor "${sensorId}"?`)) {
-    return
-  }
-  
-  loading.value = true
-  
-  try {
-    // Remove from local list
-    const index = userSensors.value.indexOf(sensorId)
-    if (index > -1) {
-      userSensors.value.splice(index, 1)
-    }
-    
-    successMessage.value = `Sensor "${sensorId}" removed successfully!`
-    
-    // TODO: Send update to backend API endpoint
-  } catch (error) {
-    errorMessage.value = 'Failed to remove sensor'
-  } finally {
-    loading.value = false
-  }
 }
 
 async function updateUserEmail() {
@@ -180,9 +82,13 @@ async function updateUserEmail() {
 
   loading.value = true
   try {
+    // Reauthenticate user before updating email
     const credential = EmailAuthProvider.credential(currentUser.email, emailPassword.value)
     await reauthenticateWithCredential(currentUser, credential)
+
+    // Update email
     await updateEmail(currentUser, newEmail.value)
+
     successMessage.value = 'Email updated successfully!'
     resetForms()
   } catch (error) {
@@ -207,9 +113,13 @@ async function updateUserPassword() {
 
   loading.value = true
   try {
+    // Reauthenticate user before updating password
     const credential = EmailAuthProvider.credential(currentUser.email, currentPassword.value)
     await reauthenticateWithCredential(currentUser, credential)
+
+    // Update password
     await updatePassword(currentUser, newPassword.value)
+
     successMessage.value = 'Password updated successfully!'
     resetForms()
   } catch (error) {
@@ -235,17 +145,13 @@ function mapFirebaseError(error) {
 
 async function logOut() {
   try {
-    await signOut(firebaseAuth)
+    await firebaseAuth.signOut()
     await router.push('/signin')
   } catch (error) {
     console.error('Logout failed:', error)
     errorMessage.value = 'Failed to sign out. Please try again.'
   }
 }
-
-onMounted(() => {
-  loadUserSensors()
-})
 </script>
 
 <template>
@@ -284,13 +190,6 @@ onMounted(() => {
             @click="switchTab('password')"
           >
             Change Password
-          </button>
-          <button
-            class="tab-button"
-            :class="{ active: activeTab === 'sensors' }"
-            @click="switchTab('sensors')"
-          >
-            Manage Sensors
           </button>
         </div>
 
@@ -399,48 +298,6 @@ onMounted(() => {
             {{ loading ? 'Updating...' : 'Update Password' }}
           </button>
         </form>
-
-        <!-- Manage Sensors Form -->
-        <div v-if="activeTab === 'sensors'" class="settings-form">
-          <div class="form-group">
-            <label for="new-sensor">Add Sensor ID</label>
-            <div class="sensor-input-group">
-              <input
-                id="new-sensor"
-                v-model="newSensorId"
-                type="text"
-                placeholder="Enter sensor ID (e.g., pi-sensor-01)"
-                class="form-input"
-              />
-              <button type="button" class="btn btn-primary" @click="addSensor" :disabled="loading || !newSensorId.trim()">
-                {{ loading ? 'Adding...' : 'Add Sensor' }}
-              </button>
-            </div>
-            <p class="form-hint">Enter your Raspberry Pi sensor ID to connect it to your account.</p>
-          </div>
-
-          <!-- Current Sensors List -->
-          <div class="sensors-section">
-            <h3 class="sensors-title">Your Connected Sensors</h3>
-            
-            <div v-if="sensorsLoading" class="sensors-loading">
-              Loading sensors...
-            </div>
-            
-            <div v-else-if="userSensors.length === 0" class="sensors-empty">
-              No sensors connected yet. Add a sensor ID above to get started.
-            </div>
-            
-            <ul v-else class="sensors-list">
-              <li v-for="sensor in userSensors" :key="sensor" class="sensor-item">
-                <span class="sensor-id">{{ sensor }}</span>
-                <button type="button" class="btn btn-danger-small" @click="removeSensor(sensor)" :disabled="loading">
-                  Remove
-                </button>
-              </li>
-            </ul>
-          </div>
-        </div>
       </div>
 
       <!-- Logout Section -->
@@ -565,7 +422,6 @@ onMounted(() => {
   gap: 12px;
   margin-bottom: 30px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  flex-wrap: wrap;
 }
 
 .tab-button {
@@ -689,64 +545,6 @@ onMounted(() => {
   margin-top: 4px;
 }
 
-.sensor-input-group {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.sensor-input-group .form-input {
-  flex: 1;
-}
-
-.sensors-section {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.sensors-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #cfe8f7;
-  margin: 0 0 16px 0;
-}
-
-.sensors-loading,
-.sensors-empty {
-  padding: 16px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #a0c4d4;
-  font-size: 14px;
-  text-align: center;
-}
-
-.sensors-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.sensor-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(76, 175, 80, 0.2);
-  border-radius: 8px;
-}
-
-.sensor-id {
-  color: #cfe8f7;
-  font-weight: 500;
-  font-family: monospace;
-}
-
 .btn {
   padding: 12px 16px;
   border: none;
@@ -771,26 +569,6 @@ onMounted(() => {
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-danger-small {
-  padding: 6px 12px;
-  font-size: 12px;
-  background: rgba(244, 67, 54, 0.2);
-  border: 1px solid rgba(244, 67, 54, 0.4);
-  color: #ffb3ae;
-}
-
-.btn-danger-small:hover:not(:disabled) {
-  background: rgba(244, 67, 54, 0.35);
-  border-color: rgba(244, 67, 54, 0.6);
-  color: #ffffff;
-  box-shadow: 0 0 12px rgba(244, 67, 54, 0.3);
-}
-
-.btn-danger-small:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -840,14 +618,6 @@ onMounted(() => {
   .tab-button {
     padding: 10px 12px;
     font-size: 13px;
-  }
-
-  .sensor-input-group {
-    flex-direction: column;
-  }
-
-  .sensor-input-group .btn {
-    width: 100%;
   }
 }
 </style>

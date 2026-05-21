@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using KlimaKontrolloerenBackend.Models;
 using KlimaKontrolloerenBackend.Services;
 
@@ -14,6 +15,7 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+    [EnableRateLimiting("auth-signin")]
     [HttpPost("signin")]
     public async Task<IActionResult> SignIn([FromBody] SignInRequest request)
     {
@@ -26,6 +28,8 @@ public class AuthController : ControllerBase
 
         return Ok(result);
     }
+
+    [EnableRateLimiting("auth-token")]
     [HttpGet("getUserUID")]
     public async Task<IActionResult> GetUserUID([FromQuery] string token)
     {
