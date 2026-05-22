@@ -79,6 +79,13 @@ Pull requests run build and test checks. Pushes to `main` and `Test` deploy to t
 
 The backend workflows publish a GitHub Actions run summary with total, passed, failed, and skipped tests. Test result files and coverage reports are uploaded as workflow artifacts.
 
+## Test user 
+
+```bash
+Email: Test@test.dk
+Password: test69
+```
+
 ## Local Commands
 
 ```bash
