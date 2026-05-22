@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { onAuthStateChanged } from 'firebase/auth'
 import KlimaDashboard from '../components/KlimaDashboard.vue'
 import SignInBoard from '../components/SignInBoard.vue'
+import ProfilePage from '../components/ProfilePage.vue'
 import { firebaseAuth } from '../firebase'
 
 const routes = [
@@ -19,6 +20,12 @@ const routes = [
     path: '/dashboard',
     name: 'dashboard',
     component: KlimaDashboard,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: ProfilePage,
     meta: { requiresAuth: true }
   }
 ]
@@ -41,14 +48,12 @@ router.beforeEach(async (to) => {
   // If Firebase is not configured locally, do not block app navigation.
   if (!firebaseAuth) return true
 
+  if (to.meta.guestOnly) return true
+
   const user = await getCurrentUser()
 
   if (to.meta.requiresAuth && !user) {
     return { name: 'signin' }
-  }
-
-  if (to.meta.guestOnly && user) {
-    return { name: 'dashboard' }
   }
 
   return true
