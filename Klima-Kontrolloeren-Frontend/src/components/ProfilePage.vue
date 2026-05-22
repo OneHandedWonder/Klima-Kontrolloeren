@@ -5,6 +5,7 @@ import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthPro
 import { firebaseAuth } from '../firebase'
 import axios from 'axios'
 const SENSOR_API = 'https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor'
+const DATA_API = 'https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/data'
 const router = useRouter()
 const currentUser = firebaseAuth.currentUser
 
@@ -29,6 +30,8 @@ const sensorsSaving = ref(false)
 const newSensorId = ref('')
 const addingSensor = ref(false)
 const addSensorError = ref('')
+const exportingAll = ref(false)
+const exportingSensorId = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -268,6 +271,80 @@ async function removeSensor(sensorId) {
   axios.delete(`${SENSOR_API}/remove`, { params: { uid: currentUser.uid, sensorId } }).catch(() => {})
 }
 
+function getCsvFileName(response, fallbackName) {
+  const contentDisposition = response.headers?.['content-disposition'] || ''
+  const match = contentDisposition.match(/filename="?([^"]+)"?/)
+  return match?.[1] || fallbackName
+}
+
+function saveBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+async function downloadCsv(url, params, fallbackName) {
+  const response = await axios.get(url, {
+    params,
+    responseType: 'blob'
+  })
+
+  saveBlob(response.data, getCsvFileName(response, fallbackName))
+}
+
+async function exportAllUserData() {
+  if (!currentUser) return
+
+  exportingAll.value = true
+  clearMessages()
+
+  try {
+    await downloadCsv(
+      `${DATA_API}/export/user`,
+      { uid: currentUser.uid },
+      `sensor-readings-${currentUser.uid}.csv`
+    )
+    successMessage.value = 'CSV export started.'
+    setTimeout(() => { successMessage.value = '' }, 3000)
+  } catch (e) {
+    const status = e?.response?.status
+    errorMessage.value = status
+      ? `Could not export CSV (HTTP ${status}).`
+      : 'Network error while exporting CSV.'
+  } finally {
+    exportingAll.value = false
+  }
+}
+
+async function exportSensorData(sensor) {
+  if (!currentUser || !sensor?.sensorId) return
+
+  exportingSensorId.value = sensor.sensorId
+  clearMessages()
+
+  try {
+    await downloadCsv(
+      `${DATA_API}/export/sensor`,
+      { uid: currentUser.uid, sensorId: sensor.sensorId },
+      `sensor-readings-${sensor.sensorId}.csv`
+    )
+    successMessage.value = `CSV export started for ${sensor.name || sensor.sensorId}.`
+    setTimeout(() => { successMessage.value = '' }, 3000)
+  } catch (e) {
+    const status = e?.response?.status
+    if (status === 404) errorMessage.value = 'This sensor is not connected to your profile.'
+    else if (status) errorMessage.value = `Could not export sensor CSV (HTTP ${status}).`
+    else errorMessage.value = 'Network error while exporting sensor CSV.'
+  } finally {
+    exportingSensorId.value = ''
+  }
+}
+
 function switchToSensors() { activeTab.value = 'sensors'; clearMessages(); loadSensors() }
 
 async function logOut() {
@@ -436,7 +513,16 @@ async function logOut() {
 
         <!-- ── My Sensors Tab ── -->
         <div v-if="activeTab === 'sensors'" class="sensors-section">
-          <p class="sensors-desc">Add sensors to your profile, name them, and describe where they are placed.</p>
+          <div class="sensors-toolbar">
+            <p class="sensors-desc">Add sensors to your profile, name them, and describe where they are placed.</p>
+            <button
+              class="btn btn-export"
+              :disabled="exportingAll || sensorsLoading || sensors.length === 0"
+              @click="exportAllUserData"
+            >
+              {{ exportingAll ? 'Exporting...' : 'Export All CSV' }}
+            </button>
+          </div>
 
           <div v-if="sensorsLoading" class="sensors-loading">Loading sensors...</div>
           <div v-else-if="sensorsError" class="message error-message">{{ sensorsError }}</div>
@@ -458,6 +544,14 @@ async function logOut() {
                     </div>
                   </div>
                   <div class="sensor-card-actions">
+                    <button
+                      class="btn-icon btn-export-small"
+                      :disabled="exportingSensorId === sensor.sensorId"
+                      @click="exportSensorData(sensor)"
+                      title="Export CSV"
+                    >
+                      {{ exportingSensorId === sensor.sensorId ? 'Exporting...' : '⬇ CSV' }}
+                    </button>
                     <button class="btn-icon btn-edit" @click="startEdit(sensor)" title="Edit">✏️ Edit</button>
                     <button class="btn-icon btn-delete" @click="removeSensor(sensor.sensorId)" title="Delete">🗑 Delete</button>
                   </div>
@@ -778,6 +872,24 @@ async function logOut() {
   cursor: not-allowed;
 }
 
+.btn-export {
+  background: rgba(88, 166, 255, 0.12);
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  color: #8cc8ff;
+  white-space: nowrap;
+}
+
+.btn-export:hover:not(:disabled) {
+  background: rgba(88, 166, 255, 0.22);
+  border-color: rgba(88, 166, 255, 0.65);
+  color: #ffffff;
+}
+
+.btn-export:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-logout {
   background: rgba(244, 67, 54, 0.2);
   border: 1px solid rgba(244, 67, 54, 0.4);
@@ -924,9 +1036,22 @@ async function logOut() {
   .add-sensor-form {
     flex-direction: column;
   }
+
+  .sensors-toolbar,
+  .sensor-card-header,
+  .sensor-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* ── Sensor tab styles ── */
+.sensors-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
 .sensors-desc { font-size: 0.9rem; color: #8b949e; margin-bottom: 1.25rem; }
 .sensors-loading, .sensors-empty { color: #8b949e; font-size: 0.9rem; padding: 0.75rem 0; }
 .sensor-card {
@@ -951,6 +1076,9 @@ async function logOut() {
 }
 .btn-edit { background: rgba(88,166,255,0.1); border-color: rgba(88,166,255,0.3); color: #58a6ff; }
 .btn-edit:hover { background: rgba(88,166,255,0.2); }
+.btn-export-small { background: rgba(88,166,255,0.1); border-color: rgba(88,166,255,0.3); color: #8cc8ff; }
+.btn-export-small:hover:not(:disabled) { background: rgba(88,166,255,0.2); }
+.btn-export-small:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-delete { background: rgba(244,67,54,0.1); border-color: rgba(244,67,54,0.3); color: #f44336; }
 .btn-delete:hover { background: rgba(244,67,54,0.2); }
 .sensor-type-checks { display: flex; gap: 1.25rem; flex-wrap: wrap; padding: 8px 0; }

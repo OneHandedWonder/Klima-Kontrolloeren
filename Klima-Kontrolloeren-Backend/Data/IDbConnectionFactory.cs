@@ -7,6 +7,7 @@ public interface IDbConnectionFactory
     Task SaveReadingAsync(SensorReadingDto dto);
     Task<List<SensorReading>> GetReadingsAsync(int limit);
     Task<List<SensorReading>> GetReadingsAsync(int limit, string uid);
+    Task<List<SensorReading>> GetReadingsForSensorAsync(int limit, string sensorId);
     Task<List<KlimaDataUser>> GetKlimaDataUserAsync(string firebaseUid);
     Task<List<string>> GetUserUIDAsync(string token);
     Task<List<SensorReading>> GetDaylyReadingsAsync();

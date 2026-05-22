@@ -36,6 +36,28 @@ public class SensorService : ISensorService
         return await _db.GetReadingsAsync(limit, uid);
     }
 
+    public async Task<List<SensorReading>?> GetReadingsAsync(int limit, string uid, string sensorId)
+    {
+        if (limit <= 0)
+            throw new ArgumentException("Limit must be greater than 0.", nameof(limit));
+
+        if (string.IsNullOrWhiteSpace(uid))
+            throw new ArgumentException("UID cannot be empty.", nameof(uid));
+
+        if (string.IsNullOrWhiteSpace(sensorId))
+            throw new ArgumentException("Sensor ID cannot be empty.", nameof(sensorId));
+
+        var users = await _db.GetKlimaDataUserAsync(uid);
+        var userOwnsSensor = users
+            .SelectMany(user => ParseSensors(user.Sensors))
+            .Any(sensor => string.Equals(sensor, sensorId, StringComparison.OrdinalIgnoreCase));
+
+        if (!userOwnsSensor)
+            return null;
+
+        return await _db.GetReadingsForSensorAsync(limit, sensorId);
+    }
+
     public async Task<List<SensorReading>> GetDaylyReadingsAsync()
     {
         return await _db.GetDaylyReadingsAsync();
@@ -101,4 +123,30 @@ public class SensorService : ISensorService
 
     public async Task RemoveSensorFromUserAsync(string uid, string sensorId)
         => await _db.RemoveSensorFromUserAsync(uid, sensorId);
+
+    private static List<string> ParseSensors(string sensorsString)
+    {
+        if (string.IsNullOrWhiteSpace(sensorsString))
+            return new List<string>();
+
+        try
+        {
+            var parsed = System.Text.Json.JsonSerializer.Deserialize<string[]>(sensorsString);
+            return parsed?.ToList() ?? new List<string>();
+        }
+        catch
+        {
+            var cleaned = sensorsString.Trim().Trim('"', '\'');
+            if (cleaned.Contains(','))
+            {
+                return cleaned.Split(',')
+                    .Select(s => s.Trim().Trim('"', '\''))
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToList();
+            }
+
+            var trimmed = sensorsString.Trim('"', '\'').Trim();
+            return string.IsNullOrWhiteSpace(trimmed) ? new List<string>() : new List<string> { trimmed };
+        }
+    }
 }

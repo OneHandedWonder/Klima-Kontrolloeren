@@ -11,6 +11,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<IDbConnectionFactory, DbConnectionFactory>();
 builder.Services.AddScoped<ISensorService, SensorService>();
+builder.Services.AddScoped<ICsvService, CsvService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddRateLimiter(options =>

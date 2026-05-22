@@ -11,10 +11,14 @@ namespace KlimaKontrolloerenBackend.Controllers;
 public class DataController : ControllerBase
 {
     private readonly ISensorService _sensorService;
-    public DataController(ISensorService sensorService)
+    private readonly ICsvService _csvService;
+
+    public DataController(ISensorService sensorService, ICsvService csvService)
     {
         _sensorService = sensorService;
+        _csvService = csvService;
     }
+
     // GET api/sensor?limit=100  ← Frontend fetches readings here
     [HttpGet]
     public async Task<IActionResult> GetReadings([FromQuery] int limit = 80640, [FromQuery] string? uid = null)
@@ -28,6 +32,61 @@ public class DataController : ControllerBase
 
         return Ok(readings);
     }
+
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportReadings([FromQuery] int limit = 80640, [FromQuery] string? uid = null)
+    {
+        if (limit <= 0)
+            return BadRequest(new { error = "limit must be greater than 0." });
+
+        var readings = string.IsNullOrWhiteSpace(uid)
+            ? await _sensorService.GetReadingsAsync(limit)
+            : await _sensorService.GetReadingsAsync(limit, uid);
+
+        var csv = _csvService.GenerateSensorReadingsCsv(readings);
+        var fileName = $"sensor-readings-{DateTime.UtcNow:yyyyMMddHHmmss}.csv";
+
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
+    }
+
+    [HttpGet("export/user")]
+    public async Task<IActionResult> ExportUserReadings([FromQuery] string uid, [FromQuery] int limit = 80640)
+    {
+        if (limit <= 0)
+            return BadRequest(new { error = "limit must be greater than 0." });
+
+        if (string.IsNullOrWhiteSpace(uid))
+            return BadRequest(new { error = "uid is required." });
+
+        var readings = await _sensorService.GetReadingsAsync(limit, uid);
+        var csv = _csvService.GenerateSensorReadingsCsv(readings);
+        var fileName = $"sensor-readings-{uid}-{DateTime.UtcNow:yyyyMMddHHmmss}.csv";
+
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
+    }
+
+    [HttpGet("export/sensor")]
+    public async Task<IActionResult> ExportSensorReadings(
+        [FromQuery] string uid,
+        [FromQuery] string sensorId,
+        [FromQuery] int limit = 80640)
+    {
+        if (limit <= 0)
+            return BadRequest(new { error = "limit must be greater than 0." });
+
+        if (string.IsNullOrWhiteSpace(uid) || string.IsNullOrWhiteSpace(sensorId))
+            return BadRequest(new { error = "uid and sensorId are required." });
+
+        var readings = await _sensorService.GetReadingsAsync(limit, uid, sensorId);
+        if (readings is null)
+            return NotFound(new { error = "Sensor was not found for this user." });
+
+        var csv = _csvService.GenerateSensorReadingsCsv(readings);
+        var fileName = $"sensor-readings-{sensorId}-{DateTime.UtcNow:yyyyMMddHHmmss}.csv";
+
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
+    }
+
     [HttpGet]
     [Route("daylyAverage")]
     public async Task<IActionResult> GetDaylyReadings([FromQuery] string? uid = null)
