@@ -1075,6 +1075,13 @@ function fetchData(force = false) {
 }
 
 function applySensorData(sensorId, data) {
+  // If the backend returned a reading from a different sensor (sensorId filter not yet
+  // deployed), treat this sensor as having no data rather than showing wrong values.
+  const returnedId = data?.sensorId
+  if (returnedId && returnedId.toLowerCase() !== sensorId.toLowerCase()) {
+    data = null
+  }
+
   const reading = {
     temperature: data?.temperature ?? null,
     humidity:    data?.humidity    ?? null,
