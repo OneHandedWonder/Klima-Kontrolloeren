@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import axios from 'axios'
 import { firebaseAuth } from '../firebase'
-
 const router = useRouter()
 
 // User authentication state

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 import { firebaseAuth } from '../firebase'
 import axios from 'axios'
-
+const SENSOR_API = 'https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor'
 const router = useRouter()
 const currentUser = firebaseAuth.currentUser
 
