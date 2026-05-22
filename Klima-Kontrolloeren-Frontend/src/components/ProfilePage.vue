@@ -42,10 +42,6 @@ const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 
-// Sensor management
-const sensors = ref([])
-const newSensorId = ref('')
-const sensorsLoading = ref(false)
 const emailValidation = computed(() => {
   if (!newEmail.value) return { valid: true, message: '' }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -284,63 +280,6 @@ async function logOut() {
   }
 }
 
-// Sensor management functions
-onMounted(async () => {
-  if (activeTab.value === 'sensors') {
-    await loadUserSensors()
-  }
-})
-
-async function loadUserSensors() {
-  sensorsLoading.value = true
-  try {
-    const token = await currentUser.getIdToken()
-    const response = await axios.get(
-      'https://klimakontrolloeren-backend-b8h5g9azhqdjf3gm.norwayeast-01.azurewebsites.net/api/sensor/user',
-      {
-        headers: { Authorization: `Bearer ${token}` }
-      }
-    )
-    sensors.value = response.data.sensors || []
-  } catch (error) {
-    console.error('Failed to load sensors:', error)
-    errorMessage.value = 'Failed to load sensors'
-  } finally {
-    sensorsLoading.value = false
-  }
-}
-
-async function addSensor() {
-  if (!newSensorId.value.trim()) {
-    errorMessage.value = 'Please enter a sensor ID'
-    return
-  }
-
-  try {
-    const token = await currentUser.getIdToken()
-    // TODO: Send to backend
-    sensors.value.push(newSensorId.value)
-    successMessage.value = 'Sensor added successfully'
-    newSensorId.value = ''
-  } catch (error) {
-    console.error('Failed to add sensor:', error)
-    errorMessage.value = 'Failed to add sensor'
-  }
-}
-
-async function removeSensor(sensorId) {
-  if (!confirm(`Are you sure you want to remove sensor ${sensorId}?`)) return
-
-  try {
-    const token = await currentUser.getIdToken()
-    // TODO: Send to backend
-    sensors.value = sensors.value.filter(s => s !== sensorId)
-    successMessage.value = 'Sensor removed successfully'
-  } catch (error) {
-    console.error('Failed to remove sensor:', error)
-    errorMessage.value = 'Failed to remove sensor'
-  }
-}
 </script>
 
 <template>
@@ -384,9 +323,6 @@ async function removeSensor(sensorId) {
             class="tab-button"
             :class="{ active: activeTab === 'sensors' }"
             @click="switchToSensors"
-          >
-            My Sensors
-            @click="switchTab('sensors')"
           >
             Manage Sensors
           </button>
