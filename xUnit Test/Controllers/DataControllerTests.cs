@@ -10,11 +10,12 @@ namespace KlimaKontrolloerenBackend.Tests.Controllers;
 public class DataControllerTests
 {
     private readonly Mock<ISensorService> _sensorService = new();
+    private readonly Mock<ICsvService> _csvService = new();
     private readonly DataController _sut;
 
     public DataControllerTests()
     {
-        _sut = new DataController(_sensorService.Object);
+        _sut = new DataController(_sensorService.Object, _csvService.Object);
     }
 
     [Theory]
@@ -59,6 +60,75 @@ public class DataControllerTests
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.Same(readings, ok.Value);
         _sensorService.Verify(x => x.GetReadingsAsync(50, "uid-1"), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExportReadings_ReturnsCsvFile()
+    {
+        var readings = new List<SensorReading>
+        {
+            new() { Id = 1, SensorId = "pi-sensor-01", Temperature = 21, Humidity = 60, CO2PPM = 410 }
+        };
+
+        _sensorService.Setup(x => x.GetReadingsAsync(100)).ReturnsAsync(readings);
+        _csvService.Setup(x => x.GenerateSensorReadingsCsv(readings)).Returns("Id,SensorId\n1,pi-sensor-01\n");
+
+        var result = await _sut.ExportReadings(100);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("text/csv", file.ContentType);
+        Assert.EndsWith(".csv", file.FileDownloadName);
+        Assert.Equal("Id,SensorId\n1,pi-sensor-01\n", System.Text.Encoding.UTF8.GetString(file.FileContents));
+    }
+
+    [Fact]
+    public async Task ExportUserReadings_WithUid_ReturnsCsvForUserOwnedData()
+    {
+        var readings = new List<SensorReading>
+        {
+            new() { Id = 1, SensorId = "pi-sensor-01" }
+        };
+
+        _sensorService.Setup(x => x.GetReadingsAsync(100, "uid-1")).ReturnsAsync(readings);
+        _csvService.Setup(x => x.GenerateSensorReadingsCsv(readings)).Returns("csv");
+
+        var result = await _sut.ExportUserReadings("uid-1", 100);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("text/csv", file.ContentType);
+        Assert.Contains("uid-1", file.FileDownloadName);
+        _sensorService.Verify(x => x.GetReadingsAsync(100, "uid-1"), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExportSensorReadings_WhenUserOwnsSensor_ReturnsCsvFile()
+    {
+        var readings = new List<SensorReading>
+        {
+            new() { Id = 1, SensorId = "pi-sensor-01" }
+        };
+
+        _sensorService.Setup(x => x.GetReadingsAsync(100, "uid-1", "pi-sensor-01")).ReturnsAsync(readings);
+        _csvService.Setup(x => x.GenerateSensorReadingsCsv(readings)).Returns("csv");
+
+        var result = await _sut.ExportSensorReadings("uid-1", "pi-sensor-01", 100);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("text/csv", file.ContentType);
+        Assert.Contains("pi-sensor-01", file.FileDownloadName);
+    }
+
+    [Fact]
+    public async Task ExportSensorReadings_WhenUserDoesNotOwnSensor_Returns404()
+    {
+        _sensorService
+            .Setup(x => x.GetReadingsAsync(100, "uid-1", "other-sensor"))
+            .ReturnsAsync((List<SensorReading>?)null);
+
+        var result = await _sut.ExportSensorReadings("uid-1", "other-sensor", 100);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+        _csvService.Verify(x => x.GenerateSensorReadingsCsv(It.IsAny<IEnumerable<SensorReading>>()), Times.Never);
     }
 
     [Fact]

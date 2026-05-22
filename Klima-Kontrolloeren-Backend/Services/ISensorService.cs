@@ -7,6 +7,7 @@ public interface ISensorService
     Task SaveReadingAsync(SensorReadingDto dto);
     Task<List<SensorReading>> GetReadingsAsync(int limit = 100);
     Task<List<SensorReading>> GetReadingsAsync(int limit, string uid);
+    Task<List<SensorReading>?> GetReadingsAsync(int limit, string uid, string sensorId);
     Task<List<SensorReading>> GetDaylyReadingsAsync();
     Task<List<SensorReading>> GetDaylyReadingsAsync(string uid);
     Task<List<SensorReading>> GetWeeklyReadingsAsync();

@@ -116,6 +116,43 @@ public class SensorServiceTests
     }
 
     [Fact]
+    public async Task GetReadingsAsync_WithUidAndOwnedSensor_ReturnsSensorReadings()
+    {
+        var expected = new List<SensorReading>
+        {
+            new() { Id = 1, SensorId = "pi-sensor-01" }
+        };
+
+        _mockDb
+            .Setup(x => x.GetKlimaDataUserAsync("uid-1"))
+            .ReturnsAsync(new List<KlimaDataUser>
+            {
+                new() { Uid = "uid-1", Sensors = "[\"pi-sensor-01\",\"pi-sensor-02\"]", Enabled = true }
+            });
+        _mockDb.Setup(x => x.GetReadingsForSensorAsync(100, "pi-sensor-01")).ReturnsAsync(expected);
+
+        var result = await _sut.GetReadingsAsync(100, "uid-1", "pi-sensor-01");
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task GetReadingsAsync_WithUidAndUnownedSensor_ReturnsNull()
+    {
+        _mockDb
+            .Setup(x => x.GetKlimaDataUserAsync("uid-1"))
+            .ReturnsAsync(new List<KlimaDataUser>
+            {
+                new() { Uid = "uid-1", Sensors = "[\"pi-sensor-01\"]", Enabled = true }
+            });
+
+        var result = await _sut.GetReadingsAsync(100, "uid-1", "other-sensor");
+
+        Assert.Null(result);
+        _mockDb.Verify(x => x.GetReadingsForSensorAsync(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
     public async Task GetDaylyReadingsAsync_ReturnsDatabaseResult()
     {
         var expected = new List<SensorReading> { new() { SensorId = "pi-sensor-01" } };

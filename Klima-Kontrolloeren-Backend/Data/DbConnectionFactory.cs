@@ -74,6 +74,44 @@ public class DbConnectionFactory : IDbConnectionFactory
 }
 
     [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
+    public async Task<List<SensorReading>> GetReadingsForSensorAsync(int limit, string sensorId)
+    {
+        const string sql = """
+            SELECT TOP (@Limit) Id, FirebaseUID AS SourceId, SensorId, Temperature, Humidity, CO2PPM, RecordedAt
+            FROM SensorReadings
+            WHERE SensorId = @SensorId
+            ORDER BY RecordedAt DESC
+            """;
+
+        var readings = new List<SensorReading>();
+
+        await using var conn = new SqlConnection(_connectionString);
+        await using var cmd = new SqlCommand(sql, conn);
+
+        cmd.Parameters.AddWithValue("@Limit", limit);
+        cmd.Parameters.AddWithValue("@SensorId", sensorId);
+
+        await conn.OpenAsync();
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            readings.Add(new SensorReading
+            {
+                Id = reader.GetInt32(0),
+                SourceId = reader.GetString(1),
+                SensorId = reader.GetString(2),
+                Temperature = reader.GetDouble(3),
+                Humidity = reader.GetDouble(4),
+                CO2PPM = reader.GetDouble(5),
+                RecordedAt = reader.GetDateTime(6)
+            });
+        }
+
+        return readings;
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
     public async Task<List<SensorReading>> GetReadingsAsync(int limit, string uid)
     {
         // First, get the user's sensors from KlimaDataUsers
