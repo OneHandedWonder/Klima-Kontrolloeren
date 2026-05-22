@@ -512,6 +512,77 @@ public async Task<List<SensorReading>> GetDaylyReadingsAsync()
         return users;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
+    public async Task<SensorInfoResult?> GetSensorInfoAsync(string uid, string sensorId)
+    {
+        const string sql = "SELECT Name, Type, Location FROM SensorInfo WHERE FirebaseUID = @uid AND SensorId = @sensorId";
+        await using var conn = new SqlConnection(_connectionString);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@uid", uid);
+        cmd.Parameters.AddWithValue("@sensorId", sensorId);
+        await conn.OpenAsync();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+            return new SensorInfoResult
+            {
+                SensorId = sensorId,
+                Name = reader.IsDBNull(0) ? "" : reader.GetString(0),
+                Type = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                Location = reader.IsDBNull(2) ? "" : reader.GetString(2)
+            };
+        return null;
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
+    public async Task UpdateSensorInfoAsync(string uid, string sensorId, string name, string type, string location)
+    {
+        const string sql = """
+            IF EXISTS (SELECT 1 FROM SensorInfo WHERE FirebaseUID = @uid AND SensorId = @sensorId)
+                UPDATE SensorInfo SET Name = @name, Type = @type, Location = @location
+                WHERE FirebaseUID = @uid AND SensorId = @sensorId
+            ELSE
+                INSERT INTO SensorInfo (FirebaseUID, SensorId, Name, Type, Location)
+                VALUES (@uid, @sensorId, @name, @type, @location)
+            """;
+        await using var conn = new SqlConnection(_connectionString);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@uid", uid);
+        cmd.Parameters.AddWithValue("@sensorId", sensorId);
+        cmd.Parameters.AddWithValue("@name", name);
+        cmd.Parameters.AddWithValue("@type", type);
+        cmd.Parameters.AddWithValue("@location", location);
+        await conn.OpenAsync();
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
+    public async Task AddSensorToUserAsync(string uid, string sensorId)
+    {
+        var sensors = await GetUserSensorsListAsync(uid);
+        if (sensors.Contains(sensorId)) return;
+        sensors.Add(sensorId);
+        await UpdateUserSensorsAsync(uid, System.Text.Json.JsonSerializer.Serialize(sensors));
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Direct SQL execution is covered by integration tests, not unit tests.")]
+    public async Task RemoveSensorFromUserAsync(string uid, string sensorId)
+    {
+        var sensors = await GetUserSensorsListAsync(uid);
+        if (!sensors.Remove(sensorId)) return;
+        await UpdateUserSensorsAsync(uid, System.Text.Json.JsonSerializer.Serialize(sensors));
+    }
+
+    private async Task UpdateUserSensorsAsync(string uid, string sensorsJson)
+    {
+        const string sql = "UPDATE KlimaDataUsers SET Sensors = @Sensors WHERE UID = @uid";
+        await using var conn = new SqlConnection(_connectionString);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@uid", uid);
+        cmd.Parameters.AddWithValue("@Sensors", sensorsJson);
+        await conn.OpenAsync();
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     [ExcludeFromCodeCoverage(Justification = "Placeholder for database-backed UID lookup; actual token lookup is handled by AuthService.")]
     public async Task<List<string>> GetUserUIDAsync(string token)
     {

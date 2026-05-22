@@ -200,6 +200,13 @@ body {
 .dashboard-container { display:grid; grid-template-columns:1fr 1fr; gap:30px; margin-bottom:40px }
 .dashboard-column { display:flex; flex-direction:column; gap:30px; min-width:0 }
 .graphs-card { align-self: start; }
+
+.sensor-meta { display:flex; justify-content:center; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+.sensor-meta-item { font-size:12px; color:#5a7f99; letter-spacing:0.5px; }
+
+.sensor-toggle-row { text-align:center; margin-bottom:20px; }
+.sensor-toggle-btn { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:#7fa8bf; padding:8px 24px; border-radius:8px; cursor:pointer; font-size:0.85rem; transition:all 0.2s ease; }
+.sensor-toggle-btn:hover { background:rgba(255,255,255,0.11); color:#a0c4d4; }
 .dashboard-card { background: linear-gradient(135deg,#0f4c81 0%,#1a5a8c 100%); border-radius:15px; padding:30px; box-shadow:0 10px 40px rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); display:flex; flex-direction:column }
 .dashboard-card h3 { font-size:22px; font-weight:600; margin-bottom:5px }
 .subtitle { font-size:14px; color:#a0c4d4; margin-bottom:25px; font-weight:400 }
