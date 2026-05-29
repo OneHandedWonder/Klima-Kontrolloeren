@@ -535,7 +535,10 @@ function getCo2Status(v) {
 function getTempPos(t) {
   if (t === null) return -1
   const { min, max } = comfortSettings.value
-  return Math.min(100, Math.max(0, ((t - (min - 5)) / (max + 15)) * 100))
+  const rangeMin = min - 5
+  const rangeMax = max + 10
+  const range = rangeMax - rangeMin
+  return Math.min(100, Math.max(0, ((t - rangeMin) / range) * 100))
 }
 function getHumPos(h) { return h === null ? -1 : Math.min(100, Math.max(0, h)) }
 function getCo2Pos(v) { return v === null ? -1 : Math.min(100, Math.max(0, ((v - 300) / 1700) * 100)) }
@@ -1137,10 +1140,20 @@ function applyWeatherData(weatherData) {
 
   const daily = weatherData.daily
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  forecast.value = daily.time.slice(1, 6).map((dateStr, i) => {
+  const today = new Date().toLocaleDateString('en-CA')
+  const todayIndex = daily.time.findIndex(dateStr => dateStr >= today)
+  const forecastStartIndex = todayIndex >= 0 ? todayIndex + 1 : Math.max(0, daily.time.length - 5)
+
+  forecast.value = daily.time.slice(forecastStartIndex, forecastStartIndex + 5).map((dateStr, i) => {
+    const index = forecastStartIndex + i
     const [y, m, d] = dateStr.split('-').map(Number)
     const localDate = new Date(y, m - 1, d)
-    return { day: dayNames[localDate.getDay()], temp: Math.round(daily.temperature_2m_max[i + 1]), emoji: WMO_EMOJIS[daily.weather_code[i + 1]] || '🌡️' }
+    const maxTemp = daily.temperature_2m_max[index]
+    return {
+      day: dayNames[localDate.getDay()],
+      temp: maxTemp != null ? Math.round(maxTemp) : '—',
+      emoji: WMO_EMOJIS[daily.weather_code[index]] || '🌡️'
+    }
   })
 
   // Process hourly data for 24-hour period
