@@ -3,6 +3,7 @@
 Smart home climate monitoring with Raspberry Pi sensors, an ASP.NET Core API, and a Vue dashboard.
 
 > Code freeze: 12:00, Friday 22 May 2026.
+> Hotfix: 09:20, 29 May 2026.
 
 [![Backend CI/CD](https://github.com/OneHandedWonder/Klima-Kontrolloeren/actions/workflows/main_klimakontrolloeren-backend.yml/badge.svg?branch=main)](https://github.com/OneHandedWonder/Klima-Kontrolloeren/actions/workflows/main_klimakontrolloeren-backend.yml)
 [![Frontend CI/CD](https://github.com/OneHandedWonder/Klima-Kontrolloeren/actions/workflows/main_klimakontrolloeren-frontend.yml/badge.svg?branch=main)](https://github.com/OneHandedWonder/Klima-Kontrolloeren/actions/workflows/main_klimakontrolloeren-frontend.yml)
